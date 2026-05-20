@@ -1,0 +1,2 @@
+This is Sudoku solver app that provides Shazam like bubble that scans the screen and scrap puzzle from screen then provides solution as notification.
+The app itself only contains required permissions, why that permissions required and trigger that activates that required service. If user rejects multiple time, Android OS can block asking permission for some features. So the triggers will become shortcut to settings for appropriate settings section that encourages user to enable manually.

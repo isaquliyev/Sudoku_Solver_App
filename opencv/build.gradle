@@ -1,0 +1,110 @@
+plugins {
+    id 'com.android.library'
+    id 'maven-publish'
+    id 'kotlin-android'
+}
+
+def openCVersionName = "4.12.0"
+def openCVersionCode = ((4 * 100 + 12) * 100 + 0) * 10 + 0
+
+android {
+    namespace 'org.opencv'
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+        versionCode openCVersionCode
+        versionName openCVersionName
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+                targets "opencv_jni_shared"
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildTypes {
+        debug {
+            packaging {
+                jniLibs {
+                    keepDebugSymbols += "**/*.so"
+                }
+            }
+        }
+        release {
+            packaging {
+                jniLibs {
+                    keepDebugSymbols += "**/*.so"
+                }
+            }
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ['native/libs']
+            java.srcDirs = ['java/src']
+            res.srcDirs = ['java/res']
+            manifest.srcFile 'java/AndroidManifest.xml'
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path 'libcxx_helper/CMakeLists.txt'
+        }
+    }
+
+    buildFeatures {
+        prefabPublishing true
+        buildConfig true
+    }
+
+    prefab {
+        opencv_jni_shared {
+            headers 'native/jni/include'
+        }
+    }
+
+    publishing {
+        singleVariant('release') {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
+}
+
+publishing {
+    publications {
+        release(MavenPublication) {
+            groupId = 'org.opencv'
+            artifactId = 'opencv'
+            version = openCVersionName
+            afterEvaluate {
+                from components.release
+            }
+        }
+    }
+    repositories {
+        maven {
+            name = 'myrepo'
+            url = "${buildDir}/repo"
+        }
+    }
+}
+
+dependencies {
+}
