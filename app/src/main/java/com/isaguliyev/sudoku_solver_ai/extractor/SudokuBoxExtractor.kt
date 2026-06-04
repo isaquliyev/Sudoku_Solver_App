@@ -29,7 +29,7 @@ class SudokuBoxExtractor(context: Context) {
     companion object {
         private const val TAG = "SudokuBoxExtractor"
         private const val IMG_SIZE = 64
-        private const val MODEL_NAME = "modelv7.ptl"
+        private const val MODEL_NAME = "modelvIII.ptl"
         private const val CELL_CROP_PX = 0
     }
     

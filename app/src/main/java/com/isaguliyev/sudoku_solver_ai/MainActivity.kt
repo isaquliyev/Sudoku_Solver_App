@@ -1,7 +1,16 @@
 package com.isaguliyev.sudoku_solver_ai
 
+import android.Manifest
+import android.app.Activity
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -13,7 +22,10 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
@@ -21,11 +33,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -34,13 +50,20 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.ViewModelProvider
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.isaguliyev.sudoku_solver_ai.ui.components.EmptySudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.components.SudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
+import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
+import com.isaguliyev.sudoku_solver_ai.viewmodel.SavedScanFolderUi
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuViewModel
 import org.opencv.android.OpenCVLoader
 
@@ -48,6 +71,8 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val TAG = "MainActivity"
+        const val ACTION_SCREENSHOT = "com.isaguliyev.sudoku_solver_ai.ACTION_SCREENSHOT"
+        const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
 
         init {
             if (OpenCVLoader.initLocal()) {
@@ -58,9 +83,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val sudokuViewModel: SudokuViewModel by lazy {
+        ViewModelProvider(this)[SudokuViewModel::class.java]
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // Kick off model loading early so it is ready before any screenshot arrives
+        sudokuViewModel.initializeExtractor(this)
+        handleScreenshotIntent(intent)
         setContent {
             Sudoku_solver_aiTheme {
                 Surface(
@@ -69,6 +101,22 @@ class MainActivity : ComponentActivity() {
                 ) {
                     SudokuSolverScreen()
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleScreenshotIntent(intent)
+    }
+
+    private fun handleScreenshotIntent(intent: Intent?) {
+        if (intent?.action == ACTION_SCREENSHOT) {
+            val path = intent.getStringExtra(EXTRA_SCREENSHOT_PATH) ?: return
+            val bitmap = android.graphics.BitmapFactory.decodeFile(path)
+            if (bitmap != null) {
+                sudokuViewModel.onBitmapSelected(this, bitmap)
             }
         }
     }
@@ -104,7 +152,30 @@ fun SudokuSolverScreen(
     }
 
     var showCellImagesViewer by remember { mutableStateOf(false) }
+    var showSavedFilesViewer by remember { mutableStateOf(false) }
     val cellBitmaps = state.modelInputCellBitmaps
+
+    LaunchedEffect(showSavedFilesViewer) {
+        if (showSavedFilesViewer) {
+            viewModel.loadSavedCellHistory(context)
+        }
+    }
+
+    LaunchedEffect(state.shareCellFileEvent) {
+        val event = state.shareCellFileEvent ?: return@LaunchedEffect
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            // Force generic file-sharing flow instead of image-specific handlers.
+            type = "*/*"
+            setDataAndType(event.uri, "*/*")
+            putExtra(Intent.EXTRA_STREAM, event.uri)
+            putExtra(Intent.EXTRA_SUBJECT, event.fileName)
+            putExtra(Intent.EXTRA_TITLE, event.fileName)
+            clipData = ClipData.newUri(context.contentResolver, event.fileName, event.uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "Share file"))
+        viewModel.consumeShareCellFileEvent()
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -121,7 +192,7 @@ fun SudokuSolverScreen(
                     titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ),
                 actions = {
-                    if (state.imageUri != null) {
+                    if (state.imageUri != null || state.imageBitmap != null) {
                         IconButton(onClick = { viewModel.clearState() }) {
                             Icon(
                                 imageVector = Icons.Default.Clear,
@@ -216,30 +287,35 @@ fun SudokuSolverScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                     }
-                    if (state.imageUri != null) {
-                        var menuExpanded by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(
-                                onClick = { menuExpanded = true },
-                                modifier = Modifier.size(56.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "Menu"
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = menuExpanded,
-                                onDismissRequest = { menuExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("View cell images passed to model") },
-                                    onClick = {
-                                        menuExpanded = false
-                                        showCellImagesViewer = true
-                                    }
-                                )
-                            }
+                    var menuExpanded by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(
+                            onClick = { menuExpanded = true },
+                            modifier = Modifier.size(56.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = "Menu"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("View cell images passed to model") },
+                                onClick = {
+                                    menuExpanded = false
+                                    showCellImagesViewer = true
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("View saved cell image files") },
+                                onClick = {
+                                    menuExpanded = false
+                                    showSavedFilesViewer = true
+                                }
+                            )
                         }
                     }
                 }
@@ -354,6 +430,9 @@ fun SudokuSolverScreen(
                     }
                 }
 
+                // Floating bubble controls
+                BubbleControlCard()
+
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
@@ -387,6 +466,198 @@ fun SudokuSolverScreen(
                     cellBitmaps = cellBitmaps,
                     onDismiss = { showCellImagesViewer = false }
                 )
+            }
+            if (showSavedFilesViewer) {
+                SavedCellFilesViewer(
+                    folders = state.savedScanFolders,
+                    onDismiss = { showSavedFilesViewer = false },
+                    onRenameFile = { folderName, currentName, newName ->
+                        viewModel.renameSavedCellFile(context, folderName, currentName, newName)
+                    },
+                    onShareFile = { folderName, fileName ->
+                        viewModel.requestShareSavedCellFile(context, folderName, fileName)
+                    },
+                    onShareArchive = { folderName ->
+                        viewModel.requestShareSavedFolderArchive(context, folderName)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BubbleControlCard() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var hasNotifPermission by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            } else true
+        )
+    }
+    var isBubbleRunning by remember { mutableStateOf(FloatingBubbleService.isRunning) }
+
+    // Refresh permission and service state each time the user returns to the screen
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                hasOverlayPermission = Settings.canDrawOverlays(context)
+                hasNotifPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    ContextCompat.checkSelfPermission(
+                        context, Manifest.permission.POST_NOTIFICATIONS
+                    ) == PackageManager.PERMISSION_GRANTED
+                } else true
+                isBubbleRunning = FloatingBubbleService.isRunning
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Launches the system overlay-permission settings page
+    val overlayLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { hasOverlayPermission = Settings.canDrawOverlays(context) }
+
+    // Requests POST_NOTIFICATIONS at runtime (API 33+)
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> hasNotifPermission = granted }
+
+    // Launches the MediaProjection consent dialog, then starts the service
+    val mpLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, FloatingBubbleService::class.java).apply {
+                    putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, result.resultCode)
+                    putExtra(FloatingBubbleService.EXTRA_RESULT_DATA, result.data)
+                }
+            )
+            isBubbleRunning = true
+        }
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Floating Bubble",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                if (isBubbleRunning) {
+                    Badge { Text("Active") }
+                }
+            }
+
+            Text(
+                "Scan Sudoku puzzles from any app",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
+            )
+
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+            )
+
+            PermissionRow(
+                label = "Draw over other apps",
+                granted = hasOverlayPermission,
+                onGrant = {
+                    overlayLauncher.launch(
+                        Intent(
+                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:${context.packageName}")
+                        )
+                    )
+                }
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                PermissionRow(
+                    label = "Post notifications",
+                    granted = hasNotifPermission,
+                    onGrant = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+                )
+            }
+
+            val allPermissionsGranted = hasOverlayPermission && hasNotifPermission
+
+            Button(
+                onClick = {
+                    if (isBubbleRunning) {
+                        context.stopService(Intent(context, FloatingBubbleService::class.java))
+                        isBubbleRunning = false
+                    } else {
+                        val mpManager = context.getSystemService(
+                            Context.MEDIA_PROJECTION_SERVICE
+                        ) as MediaProjectionManager
+                        mpLauncher.launch(mpManager.createScreenCaptureIntent())
+                    }
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                enabled = allPermissionsGranted || isBubbleRunning,
+                colors = if (isBubbleRunning) {
+                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                } else {
+                    ButtonDefaults.buttonColors()
+                },
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(if (isBubbleRunning) "Stop Bubble" else "Start Bubble")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PermissionRow(label: String, granted: Boolean, onGrant: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.weight(1f)
+        ) {
+            Icon(
+                imageVector = if (granted) Icons.Default.Check else Icons.Default.Close,
+                contentDescription = null,
+                tint = if (granted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+        }
+        if (!granted) {
+            TextButton(onClick = onGrant) {
+                Text("Grant", style = MaterialTheme.typography.labelMedium)
             }
         }
     }
@@ -474,5 +745,236 @@ private fun CellImagesViewer(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SavedCellFilesViewer(
+    folders: List<SavedScanFolderUi>,
+    onDismiss: () -> Unit,
+    onRenameFile: (folderName: String, currentName: String, newName: String) -> Unit,
+    onShareFile: (folderName: String, fileName: String) -> Unit,
+    onShareArchive: (folderName: String) -> Unit
+) {
+    var renameTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var renameValue by remember { mutableStateOf("") }
+    var selectedFolderName by remember { mutableStateOf<String?>(null) }
+
+    val selectedFolder = folders.firstOrNull { it.folderName == selectedFolderName }
+    val inFolderDetail = selectedFolder != null
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shadowElevation = 4.dp
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (inFolderDetail) {
+                                IconButton(onClick = { selectedFolderName = null }) {
+                                Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                            }
+                        }
+                        Text(
+                            text = if (inFolderDetail) {
+                                selectedFolder?.folderName ?: "Saved cell files"
+                            } else {
+                                "Saved scan folders"
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (inFolderDetail && selectedFolder != null) {
+                            IconButton(onClick = { onShareArchive(selectedFolder.folderName) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = "Send as archive"
+                                )
+                            }
+                        }
+                        IconButton(onClick = {
+                            if (inFolderDetail) selectedFolderName = null else onDismiss()
+                        }) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Close")
+                        }
+                    }
+                }
+            }
+
+            if (folders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No saved scans found yet.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else if (!inFolderDetail) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(folders, key = { it.folderName }) { folder ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            onClick = { selectedFolderName = folder.folderName }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = folder.folderName,
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = folder.displayDate,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = "${folder.files.size} files",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            } else {
+                val folder = selectedFolder
+                if (folder.files.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "No image files in this folder.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyVerticalGrid(
+                        columns = GridCells.Fixed(2),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(folder.files.size) { index ->
+                            val file = folder.files[index]
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = file.fileName,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End
+                                    ) {
+                                        IconButton(onClick = {
+                                            renameTarget = folder.folderName to file.fileName
+                                            renameValue = file.fileName
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = "Rename file"
+                                            )
+                                        }
+                                        IconButton(onClick = {
+                                            onShareFile(folder.folderName, file.fileName)
+                                        }) {
+                                            Icon(
+                                                imageVector = Icons.Default.Share,
+                                                contentDescription = "Share file"
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (renameTarget != null) {
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("Rename file") },
+            text = {
+                OutlinedTextField(
+                    value = renameValue,
+                    onValueChange = { renameValue = it },
+                    singleLine = true,
+                    label = { Text("Filename") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val target = renameTarget
+                        if (target != null) {
+                            onRenameFile(target.first, target.second, renameValue)
+                        }
+                        renameTarget = null
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
