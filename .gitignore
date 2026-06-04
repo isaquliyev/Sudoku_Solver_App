@@ -15,3 +15,28 @@
 local.properties
 .idea/
 
+# Gradle
+.gradle/
+build/
+
+# Android Studio
+.idea/
+*.iml
+local.properties
+
+# Generated APKs / outputs
+*.apk
+*.aab
+
+# OpenCV build artifacts
+opencv/build/
+
+# NDK / CMake
+.cxx/
+externalNativeBuild/
+**/obj/
+**/logs/
+
+# Binary / cache
+*.bin
+*.ptl
