@@ -40,3 +40,5 @@ externalNativeBuild/
 # Binary / cache
 *.bin
 *.ptl
+
+.vscode/
