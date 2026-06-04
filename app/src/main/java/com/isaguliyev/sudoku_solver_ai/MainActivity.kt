@@ -1,12 +1,10 @@
 package com.isaguliyev.sudoku_solver_ai
 
 import android.Manifest
-import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -530,22 +528,6 @@ private fun BubbleControlCard() {
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasNotifPermission = granted }
 
-    // Launches the MediaProjection consent dialog, then starts the service
-    val mpLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK && result.data != null) {
-            ContextCompat.startForegroundService(
-                context,
-                Intent(context, FloatingBubbleService::class.java).apply {
-                    putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, result.resultCode)
-                    putExtra(FloatingBubbleService.EXTRA_RESULT_DATA, result.data)
-                }
-            )
-            isBubbleRunning = true
-        }
-    }
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -612,10 +594,12 @@ private fun BubbleControlCard() {
                         context.stopService(Intent(context, FloatingBubbleService::class.java))
                         isBubbleRunning = false
                     } else {
-                        val mpManager = context.getSystemService(
-                            Context.MEDIA_PROJECTION_SERVICE
-                        ) as MediaProjectionManager
-                        mpLauncher.launch(mpManager.createScreenCaptureIntent())
+                        FloatingBubbleService.markRunning()
+                        isBubbleRunning = true
+                        ContextCompat.startForegroundService(
+                            context,
+                            Intent(context, FloatingBubbleService::class.java)
+                        )
                     }
                 },
                 modifier = Modifier

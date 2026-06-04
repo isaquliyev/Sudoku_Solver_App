@@ -2,4 +2,6 @@
 <resources>
 
     <style name="Theme.Sudoku_solver_ai" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Sudoku.Transparent" parent="android:Theme.Translucent.NoTitleBar" />
 </resources>
