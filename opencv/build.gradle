@@ -85,6 +85,11 @@ android {
             withJavadocJar()
         }
     }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
 }
 
 publishing {

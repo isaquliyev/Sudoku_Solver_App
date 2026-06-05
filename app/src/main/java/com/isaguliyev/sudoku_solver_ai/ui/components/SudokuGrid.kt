@@ -32,14 +32,27 @@ import androidx.compose.ui.unit.sp
 fun SudokuGrid(
     digits: List<Int>,
     originalIndices: Set<Int>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isEmptyPreview: Boolean = false
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val boxTintA    = colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    val boxTintA    = if (isEmptyPreview) {
+        colorScheme.surfaceVariant.copy(alpha = 0.25f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    }
     val boxTintB    = colorScheme.surface
-    val outerColor  = colorScheme.onSurface
-    val boxColor    = colorScheme.onSurface.copy(alpha = 0.75f)
-    val cellBorder  = colorScheme.onSurface.copy(alpha = 0.12f)
+    val outerColor  = if (isEmptyPreview) {
+        colorScheme.onSurface.copy(alpha = 0.25f)
+    } else {
+        colorScheme.onSurface
+    }
+    val boxColor    = if (isEmptyPreview) {
+        colorScheme.onSurface.copy(alpha = 0.25f)
+    } else {
+        colorScheme.onSurface.copy(alpha = 0.75f)
+    }
+    val cellBorder  = colorScheme.onSurface.copy(alpha = if (isEmptyPreview) 0.10f else 0.12f)
 
     BoxWithConstraints(modifier = modifier.aspectRatio(1f)) {
         val gridSize   = maxWidth
@@ -71,7 +84,12 @@ fun SudokuGrid(
         }
 
         // Thick outer border + box dividers drawn on top via Canvas
-        GridLines(gridSize, cellSizePx, outerColor, boxColor)
+        GridLines(
+            gridSize     = gridSize,
+            cellSizePx   = cellSizePx,
+            outerColor   = outerColor,
+            boxColor     = if (isEmptyPreview) boxColor.copy(alpha = 0.6f) else boxColor
+        )
     }
 }
 
@@ -149,39 +167,10 @@ private fun GridLines(
  */
 @Composable
 fun EmptySudokuGrid(modifier: Modifier = Modifier) {
-    val colorScheme = MaterialTheme.colorScheme
-    val cellBorder  = colorScheme.onSurface.copy(alpha = 0.10f)
-    val boxColor    = colorScheme.onSurface.copy(alpha = 0.25f)
-    val boxTintA    = colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    val boxTintB    = colorScheme.surface
-
-    BoxWithConstraints(modifier = modifier.aspectRatio(1f)) {
-        val gridSize   = maxWidth
-        val cellSizePx = with(LocalDensity.current) { (gridSize / 9).toPx() }
-
-        Column(modifier = Modifier.fillMaxSize()) {
-            for (row in 0 until 9) {
-                Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    for (col in 0 until 9) {
-                        val tint = if ((row / 3 + col / 3) % 2 == 0) boxTintA else boxTintB
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .background(tint)
-                                .drawBehind {
-                                    val s = 0.5.dp.toPx()
-                                    drawLine(cellBorder, Offset(0f, 0f), Offset(size.width, 0f), s)
-                                    drawLine(cellBorder, Offset(0f, size.height), Offset(size.width, size.height), s)
-                                    drawLine(cellBorder, Offset(0f, 0f), Offset(0f, size.height), s)
-                                    drawLine(cellBorder, Offset(size.width, 0f), Offset(size.width, size.height), s)
-                                }
-                        )
-                    }
-                }
-            }
-        }
-
-        GridLines(gridSize, cellSizePx, boxColor, boxColor.copy(alpha = 0.6f))
-    }
+    SudokuGrid(
+        digits          = List(81) { 0 },
+        originalIndices = emptySet(),
+        modifier        = modifier,
+        isEmptyPreview  = true
+    )
 }

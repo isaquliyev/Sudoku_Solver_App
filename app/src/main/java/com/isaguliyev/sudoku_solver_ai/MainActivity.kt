@@ -52,7 +52,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.isaguliyev.sudoku_solver_ai.ui.components.BoardEditDialog
-import com.isaguliyev.sudoku_solver_ai.ui.components.EmptySudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.components.ExtractionWarningBanner
 import com.isaguliyev.sudoku_solver_ai.ui.components.SudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
@@ -182,21 +181,11 @@ fun SudokuSolverScreen(
                     onClear   = { viewModel.clearState() }
                 )
 
-                AnimatedVisibility(
-                    visible = state.hasPreviewBoard,
-                    enter   = fadeIn() + slideInVertically(initialOffsetY = { it / 3 }),
-                    exit    = fadeOut()
-                ) {
-                    PuzzleSection(
-                        state   = state,
-                        onSolve = { viewModel.solveSudoku() },
-                        onEdit  = { showEditDialog = true }
-                    )
-                }
-
-                if (!state.hasPreviewBoard && state.imageBitmap == null) {
-                    EmptyPreviewSection()
-                }
+                GridPreviewSection(
+                    state   = state,
+                    onSolve = { viewModel.solveSudoku() },
+                    onEdit  = { showEditDialog = true }
+                )
 
                 BubbleControlPanel()
 
@@ -322,7 +311,7 @@ private fun ImageCard(
 }
 
 @Composable
-private fun PuzzleSection(
+private fun GridPreviewSection(
     state: SudokuState,
     onSolve: () -> Unit,
     onEdit: () -> Unit
@@ -339,12 +328,24 @@ private fun PuzzleSection(
             verticalAlignment     = Alignment.CenterVertically
         ) {
             Text(
-                text       = if (state.isSolved) "Solved Puzzle" else "Detected Puzzle",
-                style      = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color      = MaterialTheme.colorScheme.onBackground
+                text       = when {
+                    state.isSolved -> "Solved Puzzle"
+                    state.hasPreviewBoard -> "Detected Puzzle"
+                    else -> "Grid Preview"
+                },
+                style      = if (state.hasPreviewBoard) {
+                    MaterialTheme.typography.titleLarge
+                } else {
+                    MaterialTheme.typography.labelMedium
+                },
+                fontWeight = if (state.hasPreviewBoard) FontWeight.Bold else FontWeight.Normal,
+                color      = if (state.hasPreviewBoard) {
+                    MaterialTheme.colorScheme.onBackground
+                } else {
+                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
+                }
             )
-            if (!state.isSolved) {
+            if (state.hasPreviewBoard && !state.isSolved) {
                 EditBoardButton(onEdit = onEdit)
             }
         }
@@ -357,21 +358,22 @@ private fun PuzzleSection(
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp)
         ) {
             Box(modifier = Modifier.padding(14.dp)) {
-                val displayDigits = if (state.isSolved) {
-                    state.solvedDigits
-                } else {
-                    state.extractedDigits.map { it ?: 0 }
+                val displayDigits = when {
+                    state.isSolved -> state.solvedDigits
+                    state.hasPreviewBoard -> state.extractedDigits.map { it ?: 0 }
+                    else -> List(81) { 0 }
                 }
                 SudokuGrid(
                     digits          = displayDigits,
                     originalIndices = state.originalDigits,
+                    isEmptyPreview  = !state.hasPreviewBoard,
                     modifier        = Modifier.fillMaxWidth()
                 )
             }
         }
 
         AnimatedVisibility(
-            visible = !state.isSolved && state.hasPreviewBoard,
+            visible = !state.isSolved && state.hasPreviewBoard && !state.isLoading,
             enter   = slideInVertically(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
             exit    = slideOutVertically() + fadeOut()
         ) {
@@ -495,25 +497,6 @@ private fun SuccessBanner() {
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun EmptyPreviewSection() {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Text(
-            text  = "Grid Preview",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-        )
-        EmptySudokuGrid(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp)
-        )
     }
 }
 
