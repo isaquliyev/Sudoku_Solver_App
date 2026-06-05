@@ -1,14 +1,8 @@
 package com.isaguliyev.sudoku_solver_ai
 
-import android.Manifest
-import android.content.ClipData
-import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -17,6 +11,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,31 +23,25 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -60,17 +49,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.isaguliyev.sudoku_solver_ai.ui.components.BoardEditDialog
 import com.isaguliyev.sudoku_solver_ai.ui.components.EmptySudokuGrid
+import com.isaguliyev.sudoku_solver_ai.ui.components.ExtractionWarningBanner
 import com.isaguliyev.sudoku_solver_ai.ui.components.SudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
 import com.isaguliyev.sudoku_solver_ai.ui.bubble.BubbleControlPanel
-import com.isaguliyev.sudoku_solver_ai.viewmodel.SavedScanFolderUi
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuState
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuViewModel
 import org.opencv.android.OpenCVLoader
@@ -129,7 +115,6 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SudokuSolverScreen(
     viewModel: SudokuViewModel = viewModel()
@@ -144,6 +129,8 @@ fun SudokuSolverScreen(
     ) { uri: Uri? -> uri?.let { viewModel.onImageSelected(context, it) } }
 
     val snackbarHostState = remember { SnackbarHostState() }
+    var showEditDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(state.errorMessage) {
         state.errorMessage?.let { msg ->
             snackbarHostState.showSnackbar(msg)
@@ -151,26 +138,15 @@ fun SudokuSolverScreen(
         }
     }
 
-    var showCellImagesViewer by remember { mutableStateOf(false) }
-    var showSavedFilesViewer by remember { mutableStateOf(false) }
-
-    LaunchedEffect(showSavedFilesViewer) {
-        if (showSavedFilesViewer) viewModel.loadSavedCellHistory(context)
-    }
-
-    LaunchedEffect(state.shareCellFileEvent) {
-        val event = state.shareCellFileEvent ?: return@LaunchedEffect
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "*/*"
-            setDataAndType(event.uri, "*/*")
-            putExtra(Intent.EXTRA_STREAM, event.uri)
-            putExtra(Intent.EXTRA_SUBJECT, event.fileName)
-            putExtra(Intent.EXTRA_TITLE, event.fileName)
-            clipData = ClipData.newUri(context.contentResolver, event.fileName, event.uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        context.startActivity(Intent.createChooser(shareIntent, "Share file"))
-        viewModel.consumeShareCellFileEvent()
+    if (showEditDialog) {
+        BoardEditDialog(
+            initialDigits = state.extractedDigits,
+            onDismiss = { showEditDialog = false },
+            onConfirm = { edited ->
+                viewModel.applyEditedBoard(edited)
+                showEditDialog = false
+            }
+        )
     }
 
     Scaffold(
@@ -182,33 +158,6 @@ fun SudokuSolverScreen(
                     modifier     = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                 )
             }
-        },
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Sudoku Solver AI",
-                        style      = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 0.5.sp
-                    )
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor       = MaterialTheme.colorScheme.surface,
-                    titleContentColor    = MaterialTheme.colorScheme.onSurface,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
-                actions = {
-                    if (state.imageUri != null || state.imageBitmap != null) {
-                        IconButton(onClick = { viewModel.clearState() }) {
-                            Icon(
-                                imageVector        = Icons.Default.Clear,
-                                contentDescription = "Clear image"
-                            )
-                        }
-                    }
-                }
-            )
         }
     ) { paddingValues ->
         Box(
@@ -219,50 +168,41 @@ fun SudokuSolverScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .statusBarsPadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
 
-                // ── Image card (4:3) ────────────────────────────────────────
                 ImageCard(
-                    bitmap = state.imageBitmap,
-                    onClick = { imagePickerLauncher.launch("image/*") }
+                    bitmap    = state.imageBitmap,
+                    showClear = state.hasPreviewBoard || state.imageBitmap != null,
+                    onClick   = { imagePickerLauncher.launch("image/*") },
+                    onClear   = { viewModel.clearState() }
                 )
 
-                // ── Action row: pick / change image + overflow menu ─────────
-                ActionRow(
-                    hasImage      = state.imageUri != null || state.imageBitmap != null,
-                    onPickImage   = { imagePickerLauncher.launch("image/*") },
-                    onViewCells   = { showCellImagesViewer = true },
-                    onViewFiles   = { showSavedFilesViewer = true }
-                )
-
-                // ── Sudoku puzzle section ───────────────────────────────────
                 AnimatedVisibility(
-                    visible = state.extractedDigits.isNotEmpty(),
+                    visible = state.hasPreviewBoard,
                     enter   = fadeIn() + slideInVertically(initialOffsetY = { it / 3 }),
                     exit    = fadeOut()
                 ) {
                     PuzzleSection(
                         state   = state,
-                        onSolve = { viewModel.solveSudoku() }
+                        onSolve = { viewModel.solveSudoku() },
+                        onEdit  = { showEditDialog = true }
                     )
                 }
 
-                // ── Empty-state preview (no image selected) ─────────────────
-                if (state.extractedDigits.isEmpty() && state.imageBitmap == null) {
+                if (!state.hasPreviewBoard && state.imageBitmap == null) {
                     EmptyPreviewSection()
                 }
 
-                // ── Floating bubble controls ────────────────────────────────
                 BubbleControlPanel()
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
 
-            // ── Loading overlay ─────────────────────────────────────────────
             AnimatedVisibility(
                 visible = state.isLoading,
                 enter   = fadeIn(),
@@ -271,32 +211,24 @@ fun SudokuSolverScreen(
                 LoadingOverlay()
             }
 
-            // ── Secondary screens ───────────────────────────────────────────
-            if (showCellImagesViewer) {
-                CellImagesViewer(
-                    cellBitmaps = state.modelInputCellBitmaps,
-                    onDismiss   = { showCellImagesViewer = false }
-                )
-            }
-            if (showSavedFilesViewer) {
-                SavedCellFilesViewer(
-                    folders      = state.savedScanFolders,
-                    onDismiss    = { showSavedFilesViewer = false },
-                    onRenameFile = { folder, cur, new -> viewModel.renameSavedCellFile(context, folder, cur, new) },
-                    onShareFile  = { folder, file -> viewModel.requestShareSavedCellFile(context, folder, file) },
-                    onShareArchive = { folder -> viewModel.requestShareSavedFolderArchive(context, folder) }
-                )
-            }
+            ExtractionWarningBanner(
+                visible   = state.showExtractionWarning,
+                onDismiss = { viewModel.dismissExtractionWarning() },
+                modifier  = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 8.dp, start = 16.dp, end = 16.dp)
+            )
         }
     }
 }
 
-// ── Image card ────────────────────────────────────────────────────────────────
-
 @Composable
 private fun ImageCard(
     bitmap: android.graphics.Bitmap?,
-    onClick: () -> Unit
+    showClear: Boolean,
+    onClick: () -> Unit,
+    onClear: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Card(
@@ -319,7 +251,6 @@ private fun ImageCard(
                     contentScale       = ContentScale.Fit
                 )
             } else {
-                // Empty state inside the card
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
@@ -362,90 +293,61 @@ private fun ImageCard(
                     )
                 }
             }
-        }
-    }
-}
 
-// ── Action row ────────────────────────────────────────────────────────────────
-
-@Composable
-private fun ActionRow(
-    hasImage: Boolean,
-    onPickImage: () -> Unit,
-    onViewCells: () -> Unit,
-    onViewFiles: () -> Unit
-) {
-    Row(
-        modifier             = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment    = Alignment.CenterVertically
-    ) {
-        Button(
-            onClick  = onPickImage,
-            modifier = Modifier
-                .weight(1f)
-                .height(52.dp),
-            shape    = RoundedCornerShape(14.dp)
-        ) {
-            Icon(
-                imageVector        = Icons.Default.Add,
-                contentDescription = null,
-                modifier           = Modifier.size(20.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text  = if (hasImage) "Change Image" else "Add Sudoku Image",
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
-
-        var menuExpanded by remember { mutableStateOf(false) }
-        Box {
-            FilledTonalIconButton(
-                onClick  = { menuExpanded = true },
-                modifier = Modifier.size(52.dp),
-                shape    = RoundedCornerShape(14.dp)
-            ) {
-                Icon(
-                    imageVector        = Icons.Default.MoreVert,
-                    contentDescription = "More options"
-                )
-            }
-            DropdownMenu(
-                expanded          = menuExpanded,
-                onDismissRequest  = { menuExpanded = false },
-                shape             = RoundedCornerShape(16.dp)
-            ) {
-                DropdownMenuItem(
-                    text    = { Text("View cell images passed to model") },
-                    onClick = { menuExpanded = false; onViewCells() }
-                )
-                DropdownMenuItem(
-                    text    = { Text("View saved cell image files") },
-                    onClick = { menuExpanded = false; onViewFiles() }
-                )
+            if (showClear) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(8.dp)
+                ) {
+                    FilledIconButton(
+                        onClick  = onClear,
+                        modifier = Modifier.size(36.dp),
+                        shape    = CircleShape,
+                        colors   = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = colorScheme.surface.copy(alpha = 0.85f),
+                            contentColor   = colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.Close,
+                            contentDescription = "Clear sudoku",
+                            modifier           = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
     }
 }
-
-// ── Puzzle section ────────────────────────────────────────────────────────────
 
 @Composable
 private fun PuzzleSection(
     state: SudokuState,
-    onSolve: () -> Unit
+    onSolve: () -> Unit,
+    onEdit: () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(
-            text       = if (state.isSolved) "Solved Puzzle" else "Detected Puzzle",
-            style      = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-            color      = MaterialTheme.colorScheme.onBackground
-        )
+        Row(
+            modifier              = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically
+        ) {
+            Text(
+                text       = if (state.isSolved) "Solved Puzzle" else "Detected Puzzle",
+                style      = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color      = MaterialTheme.colorScheme.onBackground
+            )
+            if (!state.isSolved) {
+                EditBoardButton(onEdit = onEdit)
+            }
+        }
 
         ElevatedCard(
             modifier  = Modifier
@@ -468,9 +370,8 @@ private fun PuzzleSection(
             }
         }
 
-        // Solve button — slides in when puzzle is detected but not yet solved
         AnimatedVisibility(
-            visible = !state.isSolved && state.extractedDigits.isNotEmpty(),
+            visible = !state.isSolved && state.hasPreviewBoard,
             enter   = slideInVertically(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
             exit    = slideOutVertically() + fadeOut()
         ) {
@@ -494,13 +395,61 @@ private fun PuzzleSection(
             }
         }
 
-        // Success banner — scales in with spring
         AnimatedVisibility(
             visible = state.isSolved,
             enter   = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
             exit    = scaleOut() + fadeOut()
         ) {
             SuccessBanner()
+        }
+    }
+}
+
+@Composable
+private fun EditBoardButton(onEdit: () -> Unit) {
+    var showHitBox by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue   = if (showHitBox) 1.15f else 1f,
+        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
+        label         = "editHitBoxScale"
+    )
+    val colorScheme = MaterialTheme.colorScheme
+
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .scale(scale)
+            .then(
+                if (showHitBox) {
+                    Modifier.border(2.dp, colorScheme.primary, CircleShape)
+                } else {
+                    Modifier
+                }
+            )
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        showHitBox = true
+                        tryAwaitRelease()
+                        showHitBox = false
+                    },
+                    onTap = { onEdit() }
+                )
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(colorScheme.secondaryContainer, CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector        = Icons.Default.Edit,
+                contentDescription = "Edit board",
+                tint               = colorScheme.onSecondaryContainer,
+                modifier           = Modifier.size(20.dp)
+            )
         }
     }
 }
@@ -549,8 +498,6 @@ private fun SuccessBanner() {
     }
 }
 
-// ── Empty preview ─────────────────────────────────────────────────────────────
-
 @Composable
 private fun EmptyPreviewSection() {
     Column(
@@ -569,8 +516,6 @@ private fun EmptyPreviewSection() {
         )
     }
 }
-
-// ── Loading overlay ───────────────────────────────────────────────────────────
 
 @Composable
 private fun LoadingOverlay() {
@@ -618,308 +563,5 @@ private fun LoadingOverlay() {
                 )
             }
         }
-    }
-}
-
-// ── Cell images viewer ────────────────────────────────────────────────────────
-
-@Composable
-private fun CellImagesViewer(
-    cellBitmaps: List<android.graphics.Bitmap>,
-    onDismiss: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            SecondaryTopBar(
-                title   = "Cell images passed to model (9×9)",
-                onClose = onDismiss
-            )
-            if (cellBitmaps.isEmpty()) {
-                EmptyContent("No cell images yet.\nAdd a Sudoku image and extract first.")
-            } else {
-                LazyVerticalGrid(
-                    columns               = GridCells.Fixed(9),
-                    modifier              = Modifier
-                        .fillMaxSize()
-                        .padding(8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalArrangement   = Arrangement.spacedBy(3.dp)
-                ) {
-                    itemsIndexed(cellBitmaps) { index, bitmap ->
-                        Box(
-                            modifier = Modifier
-                                .aspectRatio(1f)
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceVariant,
-                                    RoundedCornerShape(4.dp)
-                                )
-                        ) {
-                            Image(
-                                bitmap             = bitmap.asImageBitmap(),
-                                contentDescription = "Cell ${index / 9},${index % 9}",
-                                modifier           = Modifier
-                                    .fillMaxSize()
-                                    .clip(RoundedCornerShape(4.dp)),
-                                contentScale       = ContentScale.Fit
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ── Saved files viewer ────────────────────────────────────────────────────────
-
-@Composable
-private fun SavedCellFilesViewer(
-    folders: List<SavedScanFolderUi>,
-    onDismiss: () -> Unit,
-    onRenameFile: (folderName: String, currentName: String, newName: String) -> Unit,
-    onShareFile: (folderName: String, fileName: String) -> Unit,
-    onShareArchive: (folderName: String) -> Unit
-) {
-    var renameTarget by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var renameValue  by remember { mutableStateOf("") }
-    var selectedFolderName by remember { mutableStateOf<String?>(null) }
-
-    val selectedFolder = folders.firstOrNull { it.folderName == selectedFolderName }
-    val inDetail       = selectedFolder != null
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header
-            SecondaryTopBar(
-                title        = if (inDetail) selectedFolder!!.folderName else "Saved scan folders",
-                showBack     = inDetail,
-                onBack       = { selectedFolderName = null },
-                trailingIcon = if (inDetail) {
-                    {
-                        IconButton(onClick = { onShareArchive(selectedFolder!!.folderName) }) {
-                            Icon(Icons.Default.Share, contentDescription = "Share archive")
-                        }
-                    }
-                } else null,
-                onClose = { if (inDetail) selectedFolderName = null else onDismiss() }
-            )
-
-            when {
-                folders.isEmpty() -> EmptyContent("No saved scans found yet.")
-                !inDetail -> {
-                    LazyColumn(
-                        modifier            = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(folders, key = { it.folderName }) { folder ->
-                            ElevatedCard(
-                                modifier  = Modifier.fillMaxWidth(),
-                                shape     = RoundedCornerShape(14.dp),
-                                onClick   = { selectedFolderName = folder.folderName },
-                                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
-                            ) {
-                                Row(
-                                    modifier            = Modifier.padding(16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment   = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        modifier            = Modifier.weight(1f),
-                                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                                    ) {
-                                        Text(
-                                            text       = folder.folderName,
-                                            style      = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text(
-                                            text  = folder.displayDate,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    AssistChip(
-                                        onClick = {},
-                                        label   = { Text("${folder.files.size} files", style = MaterialTheme.typography.labelSmall) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    val folder = selectedFolder!!
-                    if (folder.files.isEmpty()) {
-                        EmptyContent("No image files in this folder.")
-                    } else {
-                        LazyVerticalGrid(
-                            columns               = GridCells.Fixed(2),
-                            modifier              = Modifier
-                                .fillMaxSize()
-                                .padding(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalArrangement   = Arrangement.spacedBy(10.dp)
-                        ) {
-                            items(folder.files.size) { i ->
-                                val file = folder.files[i]
-                                ElevatedCard(
-                                    modifier  = Modifier.fillMaxWidth(),
-                                    shape     = RoundedCornerShape(12.dp),
-                                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
-                                ) {
-                                    Column(
-                                        modifier            = Modifier.padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text     = file.fileName,
-                                            style    = MaterialTheme.typography.bodySmall,
-                                            maxLines = 2,
-                                            color    = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Row(
-                                            modifier              = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.End
-                                        ) {
-                                            IconButton(onClick = {
-                                                renameTarget = folder.folderName to file.fileName
-                                                renameValue  = file.fileName
-                                            }) {
-                                                Icon(
-                                                    imageVector        = Icons.Default.Edit,
-                                                    contentDescription = "Rename",
-                                                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier           = Modifier.size(20.dp)
-                                                )
-                                            }
-                                            IconButton(onClick = { onShareFile(folder.folderName, file.fileName) }) {
-                                                Icon(
-                                                    imageVector        = Icons.Default.Share,
-                                                    contentDescription = "Share",
-                                                    tint               = MaterialTheme.colorScheme.primary,
-                                                    modifier           = Modifier.size(20.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Rename dialog
-    if (renameTarget != null) {
-        AlertDialog(
-            onDismissRequest = { renameTarget = null },
-            shape            = RoundedCornerShape(20.dp),
-            title            = { Text("Rename file", style = MaterialTheme.typography.titleMedium) },
-            text             = {
-                OutlinedTextField(
-                    value         = renameValue,
-                    onValueChange = { renameValue = it },
-                    singleLine    = true,
-                    label         = { Text("Filename") },
-                    shape         = RoundedCornerShape(12.dp)
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        renameTarget?.let { (folder, cur) -> onRenameFile(folder, cur, renameValue) }
-                        renameTarget = null
-                    },
-                    shape = RoundedCornerShape(12.dp)
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { renameTarget = null }) { Text("Cancel") }
-            }
-        )
-    }
-}
-
-// ── Shared sub-components ─────────────────────────────────────────────────────
-
-@Composable
-private fun SecondaryTopBar(
-    title: String,
-    showBack: Boolean = false,
-    onBack: () -> Unit = {},
-    trailingIcon: (@Composable () -> Unit)? = null,
-    onClose: () -> Unit
-) {
-    Surface(
-        tonalElevation = 3.dp,
-        shadowElevation = 2.dp,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Row(
-            modifier            = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment   = Alignment.CenterVertically
-        ) {
-            Row(
-                verticalAlignment    = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                modifier             = Modifier.weight(1f)
-            ) {
-                if (showBack) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
-                } else {
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
-                Text(
-                    text       = title,
-                    style      = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color      = MaterialTheme.colorScheme.onSurface,
-                    maxLines   = 1
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                trailingIcon?.invoke()
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Default.Close, contentDescription = "Close")
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EmptyContent(message: String) {
-    Box(
-        modifier         = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text      = message,
-            style     = MaterialTheme.typography.bodyLarge,
-            color     = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
     }
 }

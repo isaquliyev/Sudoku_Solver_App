@@ -49,39 +49,50 @@ class SudokuBoxExtractor(context: Context) {
      * Main entry point - extracts digit values from a Sudoku board image.
      *
      * @param imageBytes Raw image bytes (JPEG, PNG, etc.)
-     * @param modelInputCellBitmaps If non-null, filled with the 81 preprocessed cell images
-     *   (6px-cropped on each side, grayscale, resized to 64×64) as passed to the model, in row-major order.
-     * @param originalCellBitmaps If non-null, filled with the 81 original-size cell crops
-     *   (ROI from warped board, before any crop/resize), in row-major order.
      * @return List of 81 integers (1-9) or null for empty cells, in row-major order.
      *         Returns empty list if no board is detected.
      */
-    fun extract(
-        imageBytes: ByteArray,
-        modelInputCellBitmaps: MutableList<Bitmap>? = null,
-        originalCellBitmaps: MutableList<Bitmap>? = null
-    ): List<Int?> {
-        // Decode image bytes to OpenCV Mat
+    fun extract(imageBytes: ByteArray): List<Int?> {
+        return try {
+            extractInternal(imageBytes)
+        } catch (e: Exception) {
+            Log.w(TAG, "Extraction failed", e)
+            emptyList()
+        }
+    }
+
+    private fun extractInternal(imageBytes: ByteArray): List<Int?> {
         val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            ?.copy(Bitmap.Config.ARGB_8888, false)
             ?: return emptyList()
-        
+
         val img = Mat()
         Utils.bitmapToMat(bitmap, img)
-        
-        // Convert RGBA to BGR (OpenCV default)
+
         Imgproc.cvtColor(img, img, Imgproc.COLOR_RGBA2BGR)
-        
-        // Find the largest square (sudoku board)
-        val square = findBiggestSquare(img) ?: return emptyList()
-        
-        // Apply perspective transform to get a flat view
+
+        val square = findBiggestSquare(img) ?: run {
+            img.release()
+            return emptyList()
+        }
+
         val cropped = fourPointTransform(img, square)
-        
-        // Extract 81 cells and predict each one
+        img.release()
+
+        if (cropped.cols() < 9 || cropped.rows() < 9) {
+            cropped.release()
+            return emptyList()
+        }
+
         val labels = mutableListOf<Int?>()
         val cellW = cropped.cols() / 9
         val cellH = cropped.rows() / 9
-        
+
+        if (cellW < 1 || cellH < 1) {
+            cropped.release()
+            return emptyList()
+        }
+
         for (row in 0 until 9) {
             for (col in 0 until 9) {
                 val x1 = col * cellW
@@ -89,18 +100,9 @@ class SudokuBoxExtractor(context: Context) {
                 val x2 = x1 + cellW
                 val y2 = y1 + cellH
 
-                // Extract full cell ROI
                 val cellRect = Rect(x1, y1, x2 - x1, y2 - y1)
                 val cell = Mat(cropped, cellRect)
 
-                // Optional: original-size cell bitmap (before any crop or resize)
-                if (originalCellBitmaps != null) {
-                    val cellBitmap = Bitmap.createBitmap(cell.cols(), cell.rows(), Bitmap.Config.ARGB_8888)
-                    Utils.matToBitmap(cell, cellBitmap)
-                    originalCellBitmaps.add(cellBitmap)
-                }
-
-                // Crop 6px from each side to remove grid lines before passing to model
                 val croppedCell = if (cell.cols() > CELL_CROP_PX * 2 && cell.rows() > CELL_CROP_PX * 2) {
                     Mat(
                         cell,
@@ -116,31 +118,16 @@ class SudokuBoxExtractor(context: Context) {
                 }
 
                 val preprocessed = preprocessCell(croppedCell)
-
-                // Save the cropped + preprocessed bitmap for the viewer
-                if (modelInputCellBitmaps != null) {
-                    val bgr = Mat()
-                    Imgproc.cvtColor(preprocessed, bgr, Imgproc.COLOR_GRAY2BGR)
-                    val cellBmp = Bitmap.createBitmap(IMG_SIZE, IMG_SIZE, Bitmap.Config.ARGB_8888)
-                    Utils.matToBitmap(bgr, cellBmp)
-                    modelInputCellBitmaps.add(cellBmp)
-                    bgr.release()
-                }
-
                 val prediction = predictFromPreprocessed(preprocessed)
                 preprocessed.release()
                 labels.add(prediction)
 
-                // Release croppedCell only if it is a distinct Mat (not the same reference as cell)
                 if (croppedCell !== cell) croppedCell.release()
                 cell.release()
             }
         }
-        
-        // Clean up
-        img.release()
+
         cropped.release()
-        
         return labels
     }
     
@@ -241,7 +228,12 @@ class SudokuBoxExtractor(context: Context) {
         val heightA = sqrt((tr.x - br.x) * (tr.x - br.x) + (tr.y - br.y) * (tr.y - br.y))
         val heightB = sqrt((tl.x - bl.x) * (tl.x - bl.x) + (tl.y - bl.y) * (tl.y - bl.y))
         val maxHeight = max(heightA, heightB).toInt()
-        
+
+        if (maxWidth < 1 || maxHeight < 1) {
+            rect.release()
+            return Mat()
+        }
+
         // Destination points for the transform
         val dst = MatOfPoint2f(
             Point(0.0, 0.0),
