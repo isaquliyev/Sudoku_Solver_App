@@ -8,35 +8,21 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
@@ -49,7 +35,7 @@ import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
 
 @Composable
 fun BubbleControlPanel() {
-    val context = LocalContext.current
+    val context       = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
@@ -88,47 +74,76 @@ fun BubbleControlPanel() {
         ActivityResultContracts.RequestPermission()
     ) { granted -> hasNotifPermission = granted }
 
-    val allPermissionsGranted = hasOverlayPermission && hasNotifPermission
+    val allGranted = hasOverlayPermission && hasNotifPermission
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer
-        )
+    ElevatedCard(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier            = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            // ── Header row ─────────────────────────────────────────────────
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment     = Alignment.CenterVertically
             ) {
-                Text(
-                    "Floating Bubble",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment     = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier         = Modifier
+                            .size(44.dp)
+                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint               = MaterialTheme.colorScheme.primary,
+                            modifier           = Modifier.size(24.dp)
+                        )
+                    }
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text       = "Floating Bubble",
+                            style      = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color      = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text  = "Scan Sudoku puzzles from any app",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
                 if (isBubbleRunning) {
-                    Badge { Text("Active") }
+                    SuggestionChip(
+                        onClick = {},
+                        label   = { Text("Active", style = MaterialTheme.typography.labelSmall) },
+                        icon    = {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
+                            )
+                        }
+                    )
                 }
             }
 
-            Text(
-                "Scan Sudoku puzzles from any app",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
-            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            HorizontalDivider(
-                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
-            )
-
-            PermissionRow(
-                label = "Draw over other apps",
+            // ── Permissions ────────────────────────────────────────────────
+            PermissionListItem(
+                icon    = Icons.Default.Share,
+                label   = "Draw over other apps",
                 granted = hasOverlayPermission,
                 onGrant = {
                     overlayLauncher.launch(
@@ -141,13 +156,15 @@ fun BubbleControlPanel() {
             )
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                PermissionRow(
-                    label = "Post notifications",
+                PermissionListItem(
+                    icon    = Icons.Default.Notifications,
+                    label   = "Post notifications",
                     granted = hasNotifPermission,
                     onGrant = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 )
             }
 
+            // ── Start / Stop button ────────────────────────────────────────
             Button(
                 onClick = {
                     if (isBubbleRunning) {
@@ -166,49 +183,83 @@ fun BubbleControlPanel() {
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(48.dp),
-                enabled = allPermissionsGranted || isBubbleRunning,
-                colors = if (isBubbleRunning) {
+                    .height(52.dp),
+                enabled  = allGranted || isBubbleRunning,
+                colors   = if (isBubbleRunning) {
                     ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 } else {
                     ButtonDefaults.buttonColors()
                 },
-                shape = RoundedCornerShape(12.dp)
+                shape    = RoundedCornerShape(14.dp)
             ) {
-                Text(if (isBubbleRunning) "Stop Bubble" else "Start Bubble")
+                Text(
+                    text  = if (isBubbleRunning) "Stop Bubble" else "Start Bubble",
+                    style = MaterialTheme.typography.labelLarge
+                )
+            }
+
+            if (!allGranted && !isBubbleRunning) {
+                Text(
+                    text  = "Grant both permissions above to enable the bubble.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun PermissionRow(label: String, granted: Boolean, onGrant: () -> Unit) {
+private fun PermissionListItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    granted: Boolean,
+    onGrant: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier              = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment     = Alignment.CenterVertically
     ) {
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.weight(1f)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment     = Alignment.CenterVertically,
+            modifier              = Modifier.weight(1f)
         ) {
-            Icon(
-                imageVector = if (granted) Icons.Default.Check else Icons.Default.Close,
-                contentDescription = null,
-                tint = if (granted) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(18.dp)
-            )
+            Box(
+                modifier         = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (granted) colorScheme.primaryContainer
+                        else colorScheme.errorContainer
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector        = if (granted) Icons.Default.Check else Icons.Default.Close,
+                    contentDescription = null,
+                    tint               = if (granted) colorScheme.primary else colorScheme.error,
+                    modifier           = Modifier.size(18.dp)
+                )
+            }
             Text(
-                label,
+                text  = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer
+                color = colorScheme.onSurface
             )
         }
         if (!granted) {
-            TextButton(onClick = onGrant) {
-                Text("Grant", style = MaterialTheme.typography.labelMedium)
+            FilledTonalButton(
+                onClick = onGrant,
+                shape   = RoundedCornerShape(10.dp),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+            ) {
+                Text(
+                    text  = "Grant",
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }
