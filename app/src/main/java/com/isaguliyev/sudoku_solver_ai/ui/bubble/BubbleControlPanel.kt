@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -22,6 +23,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayTheme
 import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
 import com.isaguliyev.sudoku_solver_ai.ui.components.EmptyStateFace
 import com.isaguliyev.sudoku_solver_ai.ui.components.FlipGestureHint
@@ -66,6 +68,17 @@ fun BubbleControlContent(
     var showPermissionDialog by remember { mutableStateOf(false) }
 
     val isBubbleRunning by FloatingBubbleService.isRunningFlow.collectAsStateWithLifecycle()
+    val colorScheme = MaterialTheme.colorScheme
+    val overlayTheme = remember(colorScheme) {
+        BubbleOverlayTheme(
+            primary = colorScheme.primary.toArgb(),
+            onPrimary = colorScheme.onPrimary.toArgb(),
+            surface = colorScheme.surface.toArgb(),
+            onSurface = colorScheme.onSurface.toArgb(),
+            outline = colorScheme.outline.toArgb(),
+            error = colorScheme.error.toArgb()
+        )
+    }
 
     fun refreshPermissions() {
         hasOverlayPermission = Settings.canDrawOverlays(context)
@@ -78,10 +91,9 @@ fun BubbleControlContent(
 
     fun startBubbleService() {
         FloatingBubbleService.markRunning()
-        ContextCompat.startForegroundService(
-            context,
-            Intent(context, FloatingBubbleService::class.java)
-        )
+        val intent = Intent(context, FloatingBubbleService::class.java)
+        overlayTheme.putExtras(intent)
+        ContextCompat.startForegroundService(context, intent)
     }
 
     fun stopBubbleService() {

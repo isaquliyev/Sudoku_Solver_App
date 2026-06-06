@@ -25,6 +25,7 @@ import android.os.Looper
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
 import com.isaguliyev.sudoku_solver_ai.MainActivity
@@ -59,6 +60,9 @@ class FloatingBubbleService : Service() {
     private var isStopping = false
     private var isInRemovalZone = false
     private var bubbleScaleAnimator: ValueAnimator? = null
+    private var bubbleEnterAnimator: AnimatorSet? = null
+    private var menuAnimator: AnimatorSet? = null
+    private lateinit var overlayTheme: BubbleOverlayTheme
 
     companion object {
         const val EXTRA_RESULT_CODE = "result_code"
@@ -89,6 +93,7 @@ class FloatingBubbleService : Service() {
         super.onCreate()
         setRunning(true)
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+        overlayTheme = BubbleOverlayTheme.forContext(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -99,6 +104,7 @@ class FloatingBubbleService : Service() {
 
         startForegroundWithCurrentType()
         applyMediaProjectionFromIntent(intent)
+        overlayTheme = BubbleOverlayTheme.fromIntent(this, intent)
 
         if (intent?.getBooleanExtra(EXTRA_TRIGGER_CAPTURE, false) == true) {
             mainHandler.post { beginCaptureAfterProjectionReady() }
@@ -115,7 +121,7 @@ class FloatingBubbleService : Service() {
         cancelAllAnimations()
         super.onDestroy()
         setRunning(false)
-        hideMenu()
+        hideMenu(immediate = true)
         hideDismissTarget()
         removeGhostTrails()
         bubbleView?.let {
@@ -133,6 +139,10 @@ class FloatingBubbleService : Service() {
     private fun cancelAllAnimations() {
         implodeAnimator?.cancel()
         implodeAnimator = null
+        bubbleEnterAnimator?.cancel()
+        bubbleEnterAnimator = null
+        menuAnimator?.cancel()
+        menuAnimator = null
         particleBurst?.cancelBurst()
         bubbleScaleAnimator?.cancel()
         bubbleScaleAnimator = null
@@ -194,7 +204,7 @@ class FloatingBubbleService : Service() {
     private fun setupBubble() {
         val metrics = resources.displayMetrics
         val bubbleSize = BubbleOverlayUtils.dpToPx(this, BUBBLE_SIZE_DP)
-        val view = FloatingBubbleView(this, bubbleSize)
+        val view = FloatingBubbleView(this, bubbleSize, overlayTheme)
         bubbleView = view
 
         val params = WindowManager.LayoutParams(
@@ -220,7 +230,7 @@ class FloatingBubbleService : Service() {
             dragThresholdPx = BubbleOverlayUtils.dpToPx(this, DRAG_THRESHOLD_DP),
             dismissController = dismissController!!,
             onDragStart = {
-                hideMenu()
+                hideMenu(immediate = true)
                 isInRemovalZone = false
                 showGhostTrails()
                 showDismissTarget()
@@ -250,7 +260,24 @@ class FloatingBubbleService : Service() {
         )
         touchHandler!!.attach(view, params)
 
+        view.scaleX = 0f
+        view.scaleY = 0f
+        view.alpha = 0f
         windowManager.addView(view, params)
+        playBubbleEnterAnimation(view)
+    }
+
+    private fun playBubbleEnterAnimation(view: View) {
+        bubbleEnterAnimator?.cancel()
+        val scaleX = ObjectAnimator.ofFloat(view, View.SCALE_X, 0f, 1f)
+        val scaleY = ObjectAnimator.ofFloat(view, View.SCALE_Y, 0f, 1f)
+        val alpha = ObjectAnimator.ofFloat(view, View.ALPHA, 0f, 1f)
+        bubbleEnterAnimator = AnimatorSet().apply {
+            playTogether(scaleX, scaleY, alpha)
+            duration = 300L
+            interpolator = DecelerateInterpolator()
+            start()
+        }
     }
 
     private fun showGhostTrails() {
@@ -261,7 +288,7 @@ class FloatingBubbleService : Service() {
             val ghost = FrameLayout(this).apply {
                 background = GradientDrawable().apply {
                     shape = GradientDrawable.OVAL
-                    setColor(0x446650A4)
+                    setColor(overlayTheme.primaryGhost)
                 }
                 alpha = 0.35f
             }
@@ -385,7 +412,7 @@ class FloatingBubbleService : Service() {
     private fun playImplodeAndStop() {
         if (isStopping) return
         isStopping = true
-        hideMenu()
+        hideMenu(immediate = true)
         hideDismissTarget()
         removeGhostTrails()
         val view = bubbleView ?: run {
@@ -419,7 +446,7 @@ class FloatingBubbleService : Service() {
     }
 
     private fun showParticleBurst(centerX: Float, centerY: Float) {
-        val burst = DismissParticleBurst(this, centerX, centerY) {
+        val burst = DismissParticleBurst(this, centerX, centerY, overlayTheme.primary) {
             mainHandler.post {
                 particleBurst?.let {
                     try { windowManager.removeView(it) } catch (_: Exception) {}
@@ -453,9 +480,14 @@ class FloatingBubbleService : Service() {
     }
 
     private fun showMenu(bubbleLayoutParams: WindowManager.LayoutParams) {
-        if (menuView != null) return
+        menuView?.let { existing ->
+            menuAnimator?.cancel()
+            menuAnimator = null
+            try { windowManager.removeView(existing) } catch (_: Exception) {}
+            menuView = null
+        }
 
-        val menu = RadialActionMenu(context = this) {
+        val menu = RadialActionMenu(context = this, theme = overlayTheme) {
             hideMenu()
             initiateScreenCapture()
         }
@@ -464,7 +496,8 @@ class FloatingBubbleService : Service() {
         val screenWidth = resources.displayMetrics.widthPixels
         val bubbleSize = BubbleOverlayUtils.dpToPx(this, BUBBLE_SIZE_DP)
         val menuEstimatedWidth = BubbleOverlayUtils.dpToPx(this, 160)
-        val menuX = if (bubbleLayoutParams.x + bubbleSize + menuEstimatedWidth > screenWidth) {
+        val menuOnLeft = bubbleLayoutParams.x + bubbleSize + menuEstimatedWidth > screenWidth
+        val menuX = if (menuOnLeft) {
             (bubbleLayoutParams.x - menuEstimatedWidth - BubbleOverlayUtils.dpToPx(this, 8)).coerceAtLeast(0)
         } else {
             bubbleLayoutParams.x + bubbleSize + BubbleOverlayUtils.dpToPx(this, 8)
@@ -482,16 +515,71 @@ class FloatingBubbleService : Service() {
             y = bubbleLayoutParams.y + BubbleOverlayUtils.dpToPx(this@FloatingBubbleService, 4)
         }
 
+        menu.scaleX = 0.85f
+        menu.scaleY = 0.85f
+        menu.alpha = 0f
         windowManager.addView(menu, menuParams)
         isMenuVisible = true
+
+        menu.post {
+            menu.pivotX = if (menuOnLeft) menu.width.toFloat() else 0f
+            menu.pivotY = menu.height / 2f
+            playMenuEnterAnimation(menu)
+        }
     }
 
-    private fun hideMenu() {
-        menuView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-            menuView = null
+    private fun playMenuEnterAnimation(menu: View) {
+        menuAnimator?.cancel()
+        val scaleX = ObjectAnimator.ofFloat(menu, View.SCALE_X, 0.85f, 1f)
+        val scaleY = ObjectAnimator.ofFloat(menu, View.SCALE_Y, 0.85f, 1f)
+        val alpha = ObjectAnimator.ofFloat(menu, View.ALPHA, 0f, 1f)
+        menuAnimator = AnimatorSet().apply {
+            playTogether(scaleX, scaleY, alpha)
+            duration = 220L
+            interpolator = DecelerateInterpolator()
+            start()
         }
+    }
+
+    private fun hideMenu(immediate: Boolean = false) {
+        val menu = menuView ?: run {
+            isMenuVisible = false
+            return
+        }
+        if (immediate) {
+            menuAnimator?.cancel()
+            menuAnimator = null
+            try { windowManager.removeView(menu) } catch (_: Exception) {}
+            menuView = null
+            isMenuVisible = false
+            return
+        }
+        menuAnimator?.cancel()
         isMenuVisible = false
+        val scaleX = ObjectAnimator.ofFloat(menu, View.SCALE_X, menu.scaleX, 0.9f)
+        val scaleY = ObjectAnimator.ofFloat(menu, View.SCALE_Y, menu.scaleY, 0.9f)
+        val alpha = ObjectAnimator.ofFloat(menu, View.ALPHA, menu.alpha, 0f)
+        menuAnimator = AnimatorSet().apply {
+            playTogether(scaleX, scaleY, alpha)
+            duration = 150L
+            interpolator = DecelerateInterpolator()
+            addListener(object : AnimatorListenerAdapter() {
+                override fun onAnimationEnd(animation: Animator) {
+                    if (menuView === menu) {
+                        try { windowManager.removeView(menu) } catch (_: Exception) {}
+                        menuView = null
+                    }
+                }
+
+                override fun onAnimationCancel(animation: Animator) {
+                    if (menuView === menu) {
+                        try { windowManager.removeView(menu) } catch (_: Exception) {}
+                        menuView = null
+                    }
+                }
+            })
+            start()
+        }
     }
 
     private fun initiateScreenCapture() {

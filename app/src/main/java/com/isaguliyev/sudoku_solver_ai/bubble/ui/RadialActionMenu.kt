@@ -6,11 +6,13 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayTheme
 import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayUtils
 
 /** Single-action overlay menu: Scan Sudoku. */
 class RadialActionMenu(
     context: Context,
+    theme: BubbleOverlayTheme,
     onScan: () -> Unit
 ) : FrameLayout(context) {
 
@@ -20,9 +22,9 @@ class RadialActionMenu(
         setPadding(hPad, vPad, hPad, vPad)
 
         background = GradientDrawable().apply {
-            setColor(0xFFFFFFFF.toInt())
+            setColor(theme.surface)
             cornerRadius = BubbleOverlayUtils.dpToPx(context, 32).toFloat()
-            setStroke(BubbleOverlayUtils.dpToPx(context, 1), 0xFFDDDDDD.toInt())
+            setStroke(BubbleOverlayUtils.dpToPx(context, 1), theme.outline)
         }
         elevation = BubbleOverlayUtils.dpToPx(context, 8).toFloat()
 
@@ -30,7 +32,7 @@ class RadialActionMenu(
             TextView(context).apply {
                 text = "Scan Sudoku"
                 textSize = 15f
-                setTextColor(0xFF1C1B1F.toInt())
+                setTextColor(theme.onSurface)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
                 setOnClickListener { onScan() }

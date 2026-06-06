@@ -17,6 +17,7 @@ class DismissParticleBurst(
     context: Context,
     centerX: Float,
     centerY: Float,
+    primaryColor: Int,
     private val onFinished: () -> Unit
 ) : View(context) {
 
@@ -33,7 +34,12 @@ class DismissParticleBurst(
             angle = Random.nextFloat() * 360f,
             speed = 80f + Random.nextFloat() * 160f,
             size = 8f + Random.nextFloat() * 14f,
-            color = listOf(0xFF6650A4.toInt(), 0xFFE53935.toInt(), 0xFFFF6F00.toInt(), 0xFF1E88E5.toInt()).random(),
+            color = listOf(
+                primaryColor,
+                0xFFE53935.toInt(),
+                0xFFFF6F00.toInt(),
+                0xFF1E88E5.toInt()
+            ).random(),
             spin = Random.nextFloat() * 720f
         )
     }

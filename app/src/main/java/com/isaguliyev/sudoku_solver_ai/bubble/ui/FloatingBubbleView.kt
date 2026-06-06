@@ -6,23 +6,21 @@ import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
 import android.widget.FrameLayout
 import android.widget.TextView
+import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayTheme
 import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayUtils
 
 class FloatingBubbleView(
     context: Context,
-    sizePx: Int
+    sizePx: Int,
+    theme: BubbleOverlayTheme
 ) : FrameLayout(context) {
 
-    companion object {
-        const val DEFAULT_COLOR = 0xFF6650A4.toInt()
-    }
-
     init {
-        tag = DEFAULT_COLOR
+        tag = theme.primary
         background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(DEFAULT_COLOR)
-            setStroke(BubbleOverlayUtils.dpToPx(context, 2), 0x556650A4.toInt())
+            setColor(theme.primary)
+            setStroke(BubbleOverlayUtils.dpToPx(context, 2), theme.primaryStroke)
         }
         elevation = BubbleOverlayUtils.dpToPx(context, 6).toFloat()
 
@@ -30,7 +28,7 @@ class FloatingBubbleView(
             TextView(context).apply {
                 text = "S"
                 textSize = 22f
-                setTextColor(0xFFFFFFFF.toInt())
+                setTextColor(theme.onPrimary)
                 typeface = Typeface.DEFAULT_BOLD
                 gravity = Gravity.CENTER
             },
