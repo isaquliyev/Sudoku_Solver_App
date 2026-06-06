@@ -1,6 +1,7 @@
 package com.isaguliyev.sudoku_solver_ai.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -14,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -36,23 +38,32 @@ fun SudokuGrid(
     isEmptyPreview: Boolean = false
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val boxTintA    = if (isEmptyPreview) {
-        colorScheme.surfaceVariant.copy(alpha = 0.25f)
-    } else {
-        colorScheme.surfaceVariant.copy(alpha = 0.45f)
-    }
+    val fillProgress by animateFloatAsState(
+        targetValue   = if (isEmptyPreview) 0f else 1f,
+        animationSpec = tween(durationMillis = 400),
+        label         = "gridFillProgress"
+    )
+    val boxTintA = lerp(
+        colorScheme.surfaceVariant.copy(alpha = 0.25f),
+        colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        fillProgress
+    )
     val boxTintB    = colorScheme.surface
-    val outerColor  = if (isEmptyPreview) {
-        colorScheme.onSurface.copy(alpha = 0.25f)
-    } else {
-        colorScheme.onSurface
-    }
-    val boxColor    = if (isEmptyPreview) {
-        colorScheme.onSurface.copy(alpha = 0.25f)
-    } else {
-        colorScheme.onSurface.copy(alpha = 0.75f)
-    }
-    val cellBorder  = colorScheme.onSurface.copy(alpha = if (isEmptyPreview) 0.10f else 0.12f)
+    val outerColor  = lerp(
+        colorScheme.onSurface.copy(alpha = 0.25f),
+        colorScheme.onSurface,
+        fillProgress
+    )
+    val boxColor    = lerp(
+        colorScheme.onSurface.copy(alpha = 0.15f),
+        colorScheme.onSurface.copy(alpha = 0.75f),
+        fillProgress
+    )
+    val cellBorder  = lerp(
+        colorScheme.onSurface.copy(alpha = 0.10f),
+        colorScheme.onSurface.copy(alpha = 0.12f),
+        fillProgress
+    )
 
     BoxWithConstraints(modifier = modifier.aspectRatio(1f)) {
         val gridSize   = maxWidth
@@ -88,7 +99,7 @@ fun SudokuGrid(
             gridSize     = gridSize,
             cellSizePx   = cellSizePx,
             outerColor   = outerColor,
-            boxColor     = if (isEmptyPreview) boxColor.copy(alpha = 0.6f) else boxColor
+            boxColor     = boxColor
         )
     }
 }

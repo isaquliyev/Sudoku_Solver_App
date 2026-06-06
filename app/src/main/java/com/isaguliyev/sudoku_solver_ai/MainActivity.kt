@@ -9,17 +9,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
@@ -35,12 +32,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.isaguliyev.sudoku_solver_ai.ui.components.BoardEditDialog
@@ -50,6 +51,7 @@ import com.isaguliyev.sudoku_solver_ai.ui.components.SudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuState
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuViewModel
+import com.isaguliyev.sudoku_solver_ai.viewmodel.boardHasClues
 import org.opencv.android.OpenCVLoader
 
 class MainActivity : ComponentActivity() {
@@ -178,8 +180,6 @@ fun SudokuSolverScreen(
                     onSolve = { viewModel.solveSudoku() },
                     onEdit  = { showEditDialog = true }
                 )
-
-                Spacer(modifier = Modifier.height(16.dp))
             }
 
             AnimatedVisibility(
@@ -208,44 +208,20 @@ private fun GridPreviewSection(
     onSolve: () -> Unit,
     onEdit: () -> Unit
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 4.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment     = Alignment.CenterVertically
-        ) {
-            Text(
-                text       = when {
-                    state.isSolved -> "Solved Puzzle"
-                    state.hasPreviewBoard -> "Detected Puzzle"
-                    else -> "Grid Preview"
-                },
-                style      = if (state.hasPreviewBoard) {
-                    MaterialTheme.typography.titleLarge
-                } else {
-                    MaterialTheme.typography.labelMedium
-                },
-                fontWeight = if (state.hasPreviewBoard) FontWeight.Bold else FontWeight.Normal,
-                color      = if (state.hasPreviewBoard) {
-                    MaterialTheme.colorScheme.onBackground
-                } else {
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)
-                }
-            )
-            if (state.hasPreviewBoard && !state.isSolved) {
-                EditBoardButton(onEdit = onEdit)
-            }
-        }
+    val canSolve = state.hasPreviewBoard &&
+        !state.isSolved &&
+        !state.isLoading &&
+        boardHasClues(state.extractedDigits)
 
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp)
+    ) {
         ElevatedCard(
             modifier  = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 4.dp),
+                .padding(top = 18.dp),
             shape     = RoundedCornerShape(16.dp),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp)
         ) {
@@ -264,126 +240,145 @@ private fun GridPreviewSection(
             }
         }
 
-        AnimatedVisibility(
-            visible = !state.isSolved && state.hasPreviewBoard && !state.isLoading,
-            enter   = slideInVertically(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
-            exit    = slideOutVertically() + fadeOut()
+        Row(
+            modifier              = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = (-6).dp, y = 0.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Button(
-                onClick  = onSolve,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(54.dp),
-                shape    = RoundedCornerShape(14.dp)
-            ) {
-                Icon(
-                    imageVector        = Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier           = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text  = "Solve Puzzle",
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = state.isSolved,
-            enter   = scaleIn(spring(Spring.DampingRatioMediumBouncy)) + fadeIn(),
-            exit    = scaleOut() + fadeOut()
-        ) {
-            SuccessBanner()
+            GridActionBadge(
+                icon                = Icons.Default.Edit,
+                contentDescription  = "Edit board",
+                onClick             = onEdit,
+                enabled             = !state.isLoading
+            )
+            SolveActionBadge(
+                isSolved  = state.isSolved,
+                canSolve  = canSolve,
+                onSolve   = onSolve
+            )
         }
     }
 }
 
 @Composable
-private fun EditBoardButton(onEdit: () -> Unit) {
+private fun GridActionBadge(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    iconTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier: Modifier = Modifier
+) {
     var isPressed by remember { mutableStateOf(false) }
     val highlightAlpha by animateFloatAsState(
-        targetValue   = if (isPressed) 0.14f else 0f,
+        targetValue   = if (isPressed && enabled) 0.14f else 0f,
         animationSpec = tween(durationMillis = 120),
-        label         = "editPressAlpha"
+        label         = "badgePressAlpha"
     )
     val highlightScale by animateFloatAsState(
-        targetValue   = if (isPressed) 1f else 0.88f,
+        targetValue   = if (isPressed && enabled) 1f else 0.88f,
         animationSpec = tween(durationMillis = 120),
-        label         = "editPressScale"
+        label         = "badgePressScale"
     )
     val colorScheme = MaterialTheme.colorScheme
 
-    Box(
-        modifier = Modifier
-            .size(48.dp)
-            .pointerInput(Unit) {
+    Surface(
+        modifier = modifier
+            .size(40.dp)
+            .alpha(if (enabled) 1f else 0.45f)
+            .pointerInput(enabled, onClick) {
+                if (!enabled) return@pointerInput
                 detectTapGestures(
                     onPress = {
                         isPressed = true
                         tryAwaitRelease()
                         isPressed = false
                     },
-                    onTap = { onEdit() }
+                    onTap = { onClick() }
                 )
             },
-        contentAlignment = Alignment.Center
+        shape            = CircleShape,
+        color            = containerColor,
+        shadowElevation  = 4.dp,
+        tonalElevation   = 4.dp
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .scale(highlightScale)
-                .background(colorScheme.onSurface.copy(alpha = highlightAlpha), CircleShape)
-        )
-        Icon(
-            imageVector        = Icons.Default.Edit,
-            contentDescription = "Edit board",
-            tint               = colorScheme.onSurfaceVariant,
-            modifier           = Modifier.size(22.dp)
-        )
+        Box(contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .scale(highlightScale)
+                    .background(colorScheme.onSurface.copy(alpha = highlightAlpha), CircleShape)
+            )
+            Icon(
+                imageVector        = icon,
+                contentDescription = contentDescription,
+                tint               = iconTint,
+                modifier           = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
 @Composable
-private fun SuccessBanner() {
+private fun SolveActionBadge(
+    isSolved: Boolean,
+    canSolve: Boolean,
+    onSolve: () -> Unit
+) {
     val colorScheme = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape    = RoundedCornerShape(16.dp),
-        color    = colorScheme.primaryContainer,
-        tonalElevation = 2.dp
-    ) {
-        Row(
-            modifier            = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-            verticalAlignment   = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Box(
-                modifier         = Modifier
-                    .size(40.dp)
-                    .background(colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector        = Icons.Default.Check,
-                    contentDescription = null,
-                    tint               = colorScheme.onPrimary,
-                    modifier           = Modifier.size(24.dp)
-                )
-            }
-            Column {
-                Text(
-                    text       = "Puzzle Solved!",
-                    style      = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color      = colorScheme.onPrimaryContainer
-                )
-                Text(
-                    text  = "Solved digits are shown in blue",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
-                )
-            }
+    var popScale by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isSolved) {
+        if (isSolved) {
+            popScale = true
+            delay(300)
+            popScale = false
+        }
+    }
+
+    val containerColor by animateColorAsState(
+        targetValue   = if (isSolved) colorScheme.primaryContainer else colorScheme.surface,
+        animationSpec = tween(durationMillis = 300),
+        label         = "solveBadgeContainer"
+    )
+    val iconTint by animateColorAsState(
+        targetValue   = if (isSolved) colorScheme.onPrimaryContainer else colorScheme.onSurfaceVariant,
+        animationSpec = tween(durationMillis = 300),
+        label         = "solveBadgeIcon"
+    )
+    val successScale by animateFloatAsState(
+        targetValue   = if (popScale) 1.08f else 1f,
+        animationSpec = tween(durationMillis = 300),
+        label         = "solveSuccessScale"
+    )
+
+    AnimatedContent(
+        targetState = isSolved,
+        transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+        label = "solveBadgeContent"
+    ) { solved ->
+        if (solved) {
+            GridActionBadge(
+                icon               = Icons.Default.Check,
+                contentDescription = "Puzzle solved",
+                onClick            = {},
+                enabled            = false,
+                containerColor     = containerColor,
+                iconTint           = iconTint,
+                modifier           = Modifier.scale(successScale)
+            )
+        } else {
+            GridActionBadge(
+                icon               = Icons.Default.PlayArrow,
+                contentDescription = "Solve puzzle",
+                onClick            = onSolve,
+                enabled            = canSolve,
+                containerColor     = containerColor,
+                iconTint           = iconTint,
+                modifier           = Modifier.scale(successScale)
+            )
         }
     }
 }

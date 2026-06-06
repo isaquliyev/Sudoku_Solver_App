@@ -17,6 +17,8 @@ import java.io.ByteArrayOutputStream
 
 fun emptySudokuBoard(): List<Int?> = List(81) { null }
 
+fun boardHasClues(digits: List<Int?>): Boolean = digits.any { it != null }
+
 data class SudokuState(
     val imageUri: Uri? = null,
     val imageBitmap: Bitmap? = null,
@@ -146,6 +148,17 @@ class SudokuViewModel : ViewModel() {
             return
         }
 
+        if (!boardHasClues(digits)) {
+            _state.value = _state.value.copy(
+                extractedDigits = digits,
+                originalDigits = emptySet(),
+                hasPreviewBoard = true,
+                showExtractionWarning = true,
+                isLoading = false
+            )
+            return
+        }
+
         val originalIndices = digits.mapIndexedNotNull { index, value ->
             if (value != null) index else null
         }.toSet()
@@ -161,7 +174,7 @@ class SudokuViewModel : ViewModel() {
 
     fun solveSudoku() {
         val digits = _state.value.extractedDigits
-        if (digits.isEmpty()) return
+        if (digits.isEmpty() || !boardHasClues(digits)) return
 
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true, errorMessage = null)
