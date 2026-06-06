@@ -1,7 +1,5 @@
 package com.isaguliyev.sudoku_solver_ai.ui.components
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -10,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -85,21 +82,13 @@ private fun EditableCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val selectionBorder by animateColorAsState(
-        targetValue = if (isSelected) primary else Color.Transparent,
-        animationSpec = tween(200),
-        label = "selectionBorder"
-    )
-    val selectionBg by animateColorAsState(
-        targetValue = if (isSelected) primaryContainer.copy(alpha = 0.55f) else boxTint,
-        animationSpec = tween(200),
-        label = "selectionBg"
-    )
+    val backgroundColor = if (isSelected) primaryContainer.copy(alpha = 0.55f) else boxTint
+    val borderColor = if (isSelected) primary else Color.Transparent
 
     Box(
         modifier = modifier
-            .background(selectionBg)
-            .border(width = if (isSelected) 2.dp else 0.dp, color = selectionBorder)
+            .background(backgroundColor)
+            .border(width = if (isSelected) 2.dp else 0.dp, color = borderColor)
             .drawBehind {
                 val s = 0.5.dp.toPx()
                 drawLine(cellBorder, Offset(0f, 0f), Offset(size.width, 0f), s)

@@ -30,7 +30,7 @@ class SudokuBoxExtractor(context: Context) {
         private const val TAG = "SudokuBoxExtractor"
         private const val IMG_SIZE = 64
         private const val MODEL_NAME = "modelvIII.ptl"
-        private const val CELL_CROP_PX = 0
+        private const val CELL_CROP_PX = 4
     }
     
     private val model: Module

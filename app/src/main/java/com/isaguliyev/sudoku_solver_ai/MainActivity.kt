@@ -135,10 +135,7 @@ fun SudokuSolverScreen(
         BoardEditDialog(
             initialDigits = state.extractedDigits,
             onDismiss = { showEditDialog = false },
-            onConfirm = { edited ->
-                viewModel.applyEditedBoard(edited)
-                showEditDialog = false
-            }
+            onConfirm = { edited -> viewModel.applyEditedBoard(edited) }
         )
     }
 

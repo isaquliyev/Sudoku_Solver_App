@@ -210,6 +210,7 @@ class SudokuViewModel : ViewModel() {
 
     fun applyEditedBoard(digits: List<Int?>) {
         if (digits.size != 81) return
+        if (digits == _state.value.extractedDigits) return
         val originalIndices = digits.mapIndexedNotNull { index, value ->
             if (value != null) index else null
         }.toSet()
