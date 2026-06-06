@@ -8,15 +8,12 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -27,6 +24,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
 import com.isaguliyev.sudoku_solver_ai.ui.components.EmptyStateFace
+import com.isaguliyev.sudoku_solver_ai.ui.components.FlipGestureHint
 
 @Composable
 fun BubbleControlPanel() {
@@ -37,14 +35,18 @@ fun BubbleControlPanel() {
         shape     = RoundedCornerShape(20.dp),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
-        BubbleControlContent(modifier = Modifier.fillMaxSize())
+        BubbleControlContent(
+            modifier      = Modifier.fillMaxSize(),
+            showFlipHint  = false
+        )
     }
 }
 
 @Composable
 fun BubbleControlContent(
     modifier: Modifier = Modifier,
-    flipHint: String? = "Swipe for image",
+    showFlipHint: Boolean = true,
+    hintVisible: Boolean = true,
     showPageIndicator: Boolean = true,
     isBackFace: Boolean = true
 ) {
@@ -165,11 +167,11 @@ fun BubbleControlContent(
         isActive = isBubbleRunning,
         onClick  = { onBubbleTap() },
         bottomHint = {
-            if (flipHint != null) {
-                FlipHintRow(
-                    hint              = flipHint,
-                    showPageIndicator = showPageIndicator,
-                    isBackFace        = isBackFace
+            if (showFlipHint) {
+                FlipGestureHint(
+                    isBackFace        = isBackFace,
+                    visible           = hintVisible,
+                    showPageIndicator = showPageIndicator
                 )
             }
         }
@@ -217,47 +219,3 @@ private fun BubblePermissionDialog(
     )
 }
 
-@Composable
-fun FlipHintRow(
-    hint: String,
-    showPageIndicator: Boolean,
-    isBackFace: Boolean
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    Row(
-        modifier              = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 10.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment     = Alignment.CenterVertically
-    ) {
-        Text(
-            text  = hint,
-            style = MaterialTheme.typography.labelSmall,
-            color = colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
-        )
-        if (showPageIndicator) {
-            Spacer(modifier = Modifier.width(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                Box(
-                    modifier = Modifier
-                        .size(4.dp)
-                        .background(
-                            if (!isBackFace) colorScheme.primary
-                            else colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            CircleShape
-                        )
-                )
-                Box(
-                    modifier = Modifier
-                        .size(4.dp)
-                        .background(
-                            if (isBackFace) colorScheme.primary
-                            else colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
-                            CircleShape
-                        )
-                )
-            }
-        }
-    }
-}
