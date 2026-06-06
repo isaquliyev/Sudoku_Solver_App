@@ -13,6 +13,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -20,7 +21,6 @@ import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -301,31 +301,28 @@ private fun GridPreviewSection(
 
 @Composable
 private fun EditBoardButton(onEdit: () -> Unit) {
-    var showHitBox by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue   = if (showHitBox) 1.15f else 1f,
-        animationSpec = spring(Spring.DampingRatioMediumBouncy, Spring.StiffnessMedium),
-        label         = "editHitBoxScale"
+    var isPressed by remember { mutableStateOf(false) }
+    val highlightAlpha by animateFloatAsState(
+        targetValue   = if (isPressed) 0.14f else 0f,
+        animationSpec = tween(durationMillis = 120),
+        label         = "editPressAlpha"
+    )
+    val highlightScale by animateFloatAsState(
+        targetValue   = if (isPressed) 1f else 0.88f,
+        animationSpec = tween(durationMillis = 120),
+        label         = "editPressScale"
     )
     val colorScheme = MaterialTheme.colorScheme
 
     Box(
         modifier = Modifier
             .size(48.dp)
-            .scale(scale)
-            .then(
-                if (showHitBox) {
-                    Modifier.border(2.dp, colorScheme.primary, CircleShape)
-                } else {
-                    Modifier
-                }
-            )
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
-                        showHitBox = true
+                        isPressed = true
                         tryAwaitRelease()
-                        showHitBox = false
+                        isPressed = false
                     },
                     onTap = { onEdit() }
                 )
@@ -335,16 +332,15 @@ private fun EditBoardButton(onEdit: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(40.dp)
-                .background(colorScheme.secondaryContainer, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector        = Icons.Default.Edit,
-                contentDescription = "Edit board",
-                tint               = colorScheme.onSecondaryContainer,
-                modifier           = Modifier.size(20.dp)
-            )
-        }
+                .scale(highlightScale)
+                .background(colorScheme.onSurface.copy(alpha = highlightAlpha), CircleShape)
+        )
+        Icon(
+            imageVector        = Icons.Default.Edit,
+            contentDescription = "Edit board",
+            tint               = colorScheme.onSurfaceVariant,
+            modifier           = Modifier.size(22.dp)
+        )
     }
 }
 
