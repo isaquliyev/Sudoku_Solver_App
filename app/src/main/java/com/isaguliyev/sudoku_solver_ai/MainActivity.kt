@@ -19,10 +19,8 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -30,21 +28,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -53,9 +45,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.isaguliyev.sudoku_solver_ai.ui.components.BoardEditDialog
 import com.isaguliyev.sudoku_solver_ai.ui.components.ExtractionWarningBanner
+import com.isaguliyev.sudoku_solver_ai.ui.components.FlippableInputCard
 import com.isaguliyev.sudoku_solver_ai.ui.components.SudokuGrid
 import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
-import com.isaguliyev.sudoku_solver_ai.ui.bubble.BubbleControlPanel
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuState
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuViewModel
 import org.opencv.android.OpenCVLoader
@@ -174,11 +166,11 @@ fun SudokuSolverScreen(
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
 
-                ImageCard(
-                    bitmap    = state.imageBitmap,
-                    showClear = state.hasPreviewBoard || state.imageBitmap != null,
-                    onClick   = { imagePickerLauncher.launch("image/*") },
-                    onClear   = { viewModel.clearState() }
+                FlippableInputCard(
+                    bitmap       = state.imageBitmap,
+                    showClear    = state.hasPreviewBoard || state.imageBitmap != null,
+                    onImageClick = { imagePickerLauncher.launch("image/*") },
+                    onClear      = { viewModel.clearState() }
                 )
 
                 GridPreviewSection(
@@ -186,8 +178,6 @@ fun SudokuSolverScreen(
                     onSolve = { viewModel.solveSudoku() },
                     onEdit  = { showEditDialog = true }
                 )
-
-                BubbleControlPanel()
 
                 Spacer(modifier = Modifier.height(16.dp))
             }
@@ -208,104 +198,6 @@ fun SudokuSolverScreen(
                     .statusBarsPadding()
                     .padding(top = 8.dp, start = 16.dp, end = 16.dp)
             )
-        }
-    }
-}
-
-@Composable
-private fun ImageCard(
-    bitmap: android.graphics.Bitmap?,
-    showClear: Boolean,
-    onClick: () -> Unit,
-    onClear: () -> Unit
-) {
-    val colorScheme = MaterialTheme.colorScheme
-    Card(
-        modifier  = Modifier
-            .fillMaxWidth()
-            .aspectRatio(4f / 3f)
-            .clickable(onClick = onClick),
-        shape     = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors    = CardDefaults.cardColors(containerColor = colorScheme.surfaceVariant)
-    ) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (bitmap != null) {
-                Image(
-                    bitmap             = bitmap.asImageBitmap(),
-                    contentDescription = "Selected Sudoku image",
-                    modifier           = Modifier
-                        .fillMaxSize()
-                        .clip(RoundedCornerShape(20.dp)),
-                    contentScale       = ContentScale.Fit
-                )
-            } else {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                    modifier            = Modifier.padding(32.dp)
-                ) {
-                    Box(
-                        modifier          = Modifier
-                            .size(80.dp)
-                            .background(
-                                brush  = Brush.radialGradient(
-                                    listOf(
-                                        colorScheme.primary.copy(alpha = 0.15f),
-                                        colorScheme.primary.copy(alpha = 0.05f)
-                                    )
-                                ),
-                                shape  = CircleShape
-                            ),
-                        contentAlignment  = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Default.Add,
-                            contentDescription = null,
-                            modifier           = Modifier.size(40.dp),
-                            tint               = colorScheme.primary.copy(alpha = 0.7f)
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text      = "Tap to select a Sudoku image",
-                        style     = MaterialTheme.typography.titleSmall,
-                        color     = colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text      = "Or use the floating bubble to scan from any app",
-                        style     = MaterialTheme.typography.bodySmall,
-                        color     = colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                        textAlign = TextAlign.Center
-                    )
-                }
-            }
-
-            if (showClear) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                ) {
-                    FilledIconButton(
-                        onClick  = onClear,
-                        modifier = Modifier.size(36.dp),
-                        shape    = CircleShape,
-                        colors   = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = colorScheme.surface.copy(alpha = 0.85f),
-                            contentColor   = colorScheme.onSurface
-                        )
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Default.Close,
-                            contentDescription = "Clear sudoku",
-                            modifier           = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
         }
     }
 }

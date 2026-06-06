@@ -13,29 +13,42 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
+import com.isaguliyev.sudoku_solver_ai.ui.components.EmptyStateFace
 
 @Composable
 fun BubbleControlPanel() {
-    val context       = LocalContext.current
+    ElevatedCard(
+        modifier  = Modifier
+            .fillMaxWidth()
+            .aspectRatio(4f / 3f),
+        shape     = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        BubbleControlContent(modifier = Modifier.fillMaxSize())
+    }
+}
+
+@Composable
+fun BubbleControlContent(
+    modifier: Modifier = Modifier,
+    flipHint: String? = "Swipe for image",
+    showPageIndicator: Boolean = true,
+    isBackFace: Boolean = true
+) {
+    val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var hasOverlayPermission by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
@@ -48,18 +61,52 @@ fun BubbleControlPanel() {
             } else true
         )
     }
+    var showPermissionDialog by remember { mutableStateOf(false) }
 
     val isBubbleRunning by FloatingBubbleService.isRunningFlow.collectAsStateWithLifecycle()
 
-    DisposableEffect(lifecycleOwner) {
+    fun refreshPermissions() {
+        hasOverlayPermission = Settings.canDrawOverlays(context)
+        hasNotifPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else true
+    }
+
+    fun startBubbleService() {
+        FloatingBubbleService.markRunning()
+        ContextCompat.startForegroundService(
+            context,
+            Intent(context, FloatingBubbleService::class.java)
+        )
+    }
+
+    fun stopBubbleService() {
+        context.stopService(
+            Intent(context, FloatingBubbleService::class.java).apply {
+                action = FloatingBubbleService.ACTION_STOP
+            }
+        )
+    }
+
+    val allGranted = hasOverlayPermission && hasNotifPermission
+
+    DisposableEffect(lifecycleOwner, showPermissionDialog) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                hasOverlayPermission = Settings.canDrawOverlays(context)
-                hasNotifPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    ContextCompat.checkSelfPermission(
-                        context, Manifest.permission.POST_NOTIFICATIONS
-                    ) == PackageManager.PERMISSION_GRANTED
-                } else true
+                refreshPermissions()
+                if (showPermissionDialog) {
+                    val granted = Settings.canDrawOverlays(context) &&
+                        (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                            ContextCompat.checkSelfPermission(
+                                context, Manifest.permission.POST_NOTIFICATIONS
+                            ) == PackageManager.PERMISSION_GRANTED)
+                    if (granted && !FloatingBubbleService.isRunningFlow.value) {
+                        showPermissionDialog = false
+                        startBubbleService()
+                    }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -68,197 +115,147 @@ fun BubbleControlPanel() {
 
     val overlayLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
-    ) { hasOverlayPermission = Settings.canDrawOverlays(context) }
+    ) {
+        refreshPermissions()
+    }
 
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { granted -> hasNotifPermission = granted }
+    ) { granted ->
+        hasNotifPermission = granted
+    }
 
-    val allGranted = hasOverlayPermission && hasNotifPermission
+    fun onBubbleTap() {
+        if (isBubbleRunning) {
+            stopBubbleService()
+        } else if (allGranted) {
+            startBubbleService()
+        } else {
+            showPermissionDialog = true
+        }
+    }
 
-    ElevatedCard(
-        modifier  = Modifier.fillMaxWidth(),
-        shape     = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
-    ) {
-        Column(
-            modifier            = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            // ── Header row ─────────────────────────────────────────────────
-            Row(
-                modifier              = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment     = Alignment.CenterVertically
-            ) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment     = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier         = Modifier
-                            .size(44.dp)
-                            .background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector        = Icons.Default.PlayArrow,
-                            contentDescription = null,
-                            tint               = MaterialTheme.colorScheme.primary,
-                            modifier           = Modifier.size(24.dp)
-                        )
-                    }
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text       = "Floating Bubble",
-                            style      = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color      = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text  = "Scan Sudoku puzzles from any app",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                if (isBubbleRunning) {
-                    SuggestionChip(
-                        onClick = {},
-                        label   = { Text("Active", style = MaterialTheme.typography.labelSmall) },
-                        icon    = {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .background(MaterialTheme.colorScheme.primary, CircleShape)
-                            )
-                        }
+    if (showPermissionDialog) {
+        BubblePermissionDialog(
+            hasOverlayPermission = hasOverlayPermission,
+            hasNotifPermission   = hasNotifPermission,
+            onDismiss            = { showPermissionDialog = false },
+            onGrantOverlay       = {
+                overlayLauncher.launch(
+                    Intent(
+                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        Uri.parse("package:${context.packageName}")
                     )
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-            // ── Permissions ────────────────────────────────────────────────
-            PermissionListItem(
-                icon    = Icons.Default.Share,
-                label   = "Draw over other apps",
-                granted = hasOverlayPermission,
-                onGrant = {
-                    overlayLauncher.launch(
-                        Intent(
-                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                            Uri.parse("package:${context.packageName}")
-                        )
-                    )
-                }
-            )
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                PermissionListItem(
-                    icon    = Icons.Default.Notifications,
-                    label   = "Post notifications",
-                    granted = hasNotifPermission,
-                    onGrant = { notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) }
                 )
+            },
+            onGrantNotifications = {
+                notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
+        )
+    }
 
-            // ── Start / Stop button ────────────────────────────────────────
-            Button(
-                onClick = {
-                    if (isBubbleRunning) {
-                        context.stopService(
-                            Intent(context, FloatingBubbleService::class.java).apply {
-                                action = FloatingBubbleService.ACTION_STOP
-                            }
-                        )
-                    } else {
-                        FloatingBubbleService.markRunning()
-                        ContextCompat.startForegroundService(
-                            context,
-                            Intent(context, FloatingBubbleService::class.java)
-                        )
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                enabled  = allGranted || isBubbleRunning,
-                colors   = if (isBubbleRunning) {
-                    ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                } else {
-                    ButtonDefaults.buttonColors()
-                },
-                shape    = RoundedCornerShape(14.dp)
-            ) {
-                Text(
-                    text  = if (isBubbleRunning) "Stop Bubble" else "Start Bubble",
-                    style = MaterialTheme.typography.labelLarge
-                )
-            }
-
-            if (!allGranted && !isBubbleRunning) {
-                Text(
-                    text  = "Grant both permissions above to enable the bubble.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    EmptyStateFace(
+        icon     = Icons.Default.PlayArrow,
+        label    = if (isBubbleRunning) {
+            "Tap to stop floating bubble"
+        } else {
+            "Tap to start floating bubble"
+        },
+        modifier = modifier,
+        isActive = isBubbleRunning,
+        onClick  = { onBubbleTap() },
+        bottomHint = {
+            if (flipHint != null) {
+                FlipHintRow(
+                    hint              = flipHint,
+                    showPageIndicator = showPageIndicator,
+                    isBackFace        = isBackFace
                 )
             }
         }
-    }
+    )
 }
 
 @Composable
-private fun PermissionListItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    granted: Boolean,
-    onGrant: () -> Unit
+private fun BubblePermissionDialog(
+    hasOverlayPermission: Boolean,
+    hasNotifPermission: Boolean,
+    onDismiss: () -> Unit,
+    onGrantOverlay: () -> Unit,
+    onGrantNotifications: () -> Unit
+) {
+    val needsNotif = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifPermission
+    val message = buildString {
+        append("The floating bubble needs permission to draw over other apps")
+        if (needsNotif) append(" and post notifications")
+        append(" so you can scan Sudoku puzzles from any app.")
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title            = { Text("Permissions required") },
+        text             = { Text(message) },
+        confirmButton    = {
+            Column {
+                if (!hasOverlayPermission) {
+                    TextButton(onClick = onGrantOverlay) {
+                        Text("Grant overlay")
+                    }
+                }
+                if (needsNotif) {
+                    TextButton(onClick = onGrantNotifications) {
+                        Text("Grant notifications")
+                    }
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun FlipHintRow(
+    hint: String,
+    showPageIndicator: Boolean,
+    isBackFace: Boolean
 ) {
     val colorScheme = MaterialTheme.colorScheme
     Row(
-        modifier              = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier              = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 10.dp),
+        horizontalArrangement = Arrangement.Center,
         verticalAlignment     = Alignment.CenterVertically
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment     = Alignment.CenterVertically,
-            modifier              = Modifier.weight(1f)
-        ) {
-            Box(
-                modifier         = Modifier
-                    .size(36.dp)
-                    .clip(CircleShape)
-                    .background(
-                        if (granted) colorScheme.primaryContainer
-                        else colorScheme.errorContainer
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector        = if (granted) Icons.Default.Check else Icons.Default.Close,
-                    contentDescription = null,
-                    tint               = if (granted) colorScheme.primary else colorScheme.error,
-                    modifier           = Modifier.size(18.dp)
+        Text(
+            text  = hint,
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.onSurfaceVariant.copy(alpha = 0.65f)
+        )
+        if (showPageIndicator) {
+            Spacer(modifier = Modifier.width(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .background(
+                            if (!isBackFace) colorScheme.primary
+                            else colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            CircleShape
+                        )
                 )
-            }
-            Text(
-                text  = label,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.onSurface
-            )
-        }
-        if (!granted) {
-            FilledTonalButton(
-                onClick = onGrant,
-                shape   = RoundedCornerShape(10.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
-            ) {
-                Text(
-                    text  = "Grant",
-                    style = MaterialTheme.typography.labelMedium
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .background(
+                            if (isBackFace) colorScheme.primary
+                            else colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                            CircleShape
+                        )
                 )
             }
         }
