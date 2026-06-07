@@ -101,7 +101,7 @@ fun BubbleControlContent(
     }
 
     fun stopBubbleService() {
-        context.stopService(
+        context.startService(
             Intent(context, FloatingBubbleService::class.java).apply {
                 action = FloatingBubbleService.ACTION_STOP
             }
@@ -194,12 +194,9 @@ fun BubbleControlContent(
             }
         )
 
-        if (showClear || isBubbleRunning) {
+        if (showClear) {
             CardClearButton(
-                onClick = {
-                    if (isBubbleRunning) stopBubbleService()
-                    if (showClear) onClear()
-                },
+                onClick = onClear,
                 contentDescription = "Clear sudoku",
                 modifier = Modifier
                     .align(Alignment.TopEnd)

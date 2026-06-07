@@ -409,6 +409,14 @@ class FloatingBubbleService : Service() {
         }
     }
 
+    private fun bubbleCenterOnScreen(view: View, params: WindowManager.LayoutParams): Pair<Float, Float> {
+        val width = if (view.width > 0) view.width else params.width
+        val height = if (view.height > 0) view.height else params.height
+        val location = IntArray(2)
+        view.getLocationOnScreen(location)
+        return (location[0] + width / 2f) to (location[1] + height / 2f)
+    }
+
     private fun playImplodeAndStop() {
         if (isStopping) return
         isStopping = true
@@ -425,8 +433,10 @@ class FloatingBubbleService : Service() {
         }
         resetBubbleDismissFeedback(view)
 
-        val cx = params.x + view.width / 2f
-        val cy = params.y + view.height / 2f
+        val width = if (view.width > 0) view.width else params.width
+        val height = if (view.height > 0) view.height else params.height
+        view.pivotX = width / 2f
+        view.pivotY = height / 2f
 
         val scaleX = ObjectAnimator.ofFloat(view, View.SCALE_X, view.scaleX, 0f)
         val scaleY = ObjectAnimator.ofFloat(view, View.SCALE_Y, view.scaleY, 0f)
@@ -438,6 +448,7 @@ class FloatingBubbleService : Service() {
             duration = 420L
             addListener(object : AnimatorListenerAdapter() {
                 override fun onAnimationEnd(animation: Animator) {
+                    val (cx, cy) = bubbleCenterOnScreen(view, params)
                     showParticleBurst(cx, cy)
                 }
             })
