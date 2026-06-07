@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
@@ -25,6 +26,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayTheme
 import com.isaguliyev.sudoku_solver_ai.bubble.FloatingBubbleService
+import com.isaguliyev.sudoku_solver_ai.ui.components.CardClearButton
 import com.isaguliyev.sudoku_solver_ai.ui.components.EmptyStateFace
 import com.isaguliyev.sudoku_solver_ai.ui.components.FlipGestureHint
 
@@ -50,7 +52,9 @@ fun BubbleControlContent(
     showFlipHint: Boolean = true,
     hintVisible: Boolean = true,
     showPageIndicator: Boolean = true,
-    isBackFace: Boolean = true
+    isBackFace: Boolean = true,
+    showClear: Boolean = false,
+    onClear: () -> Unit = {}
 ) {
     val context        = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -168,26 +172,41 @@ fun BubbleControlContent(
         )
     }
 
-    EmptyStateFace(
-        icon     = Icons.Default.PlayArrow,
-        label    = if (isBubbleRunning) {
-            "Tap to stop floating bubble"
-        } else {
-            "Tap to start floating bubble"
-        },
-        modifier = modifier,
-        isActive = isBubbleRunning,
-        onClick  = { onBubbleTap() },
-        bottomHint = {
-            if (showFlipHint) {
-                FlipGestureHint(
-                    isBackFace        = isBackFace,
-                    visible           = hintVisible,
-                    showPageIndicator = showPageIndicator
-                )
+    Box(modifier = modifier) {
+        EmptyStateFace(
+            icon     = Icons.Default.PlayArrow,
+            label    = if (isBubbleRunning) {
+                "Tap to stop floating bubble"
+            } else {
+                "Tap to start floating bubble"
+            },
+            modifier = Modifier.fillMaxSize(),
+            isActive = isBubbleRunning,
+            onClick  = { onBubbleTap() },
+            bottomHint = {
+                if (showFlipHint) {
+                    FlipGestureHint(
+                        isBackFace        = isBackFace,
+                        visible           = hintVisible,
+                        showPageIndicator = showPageIndicator
+                    )
+                }
             }
+        )
+
+        if (showClear || isBubbleRunning) {
+            CardClearButton(
+                onClick = {
+                    if (isBubbleRunning) stopBubbleService()
+                    if (showClear) onClear()
+                },
+                contentDescription = "Clear sudoku",
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(8.dp)
+            )
         }
-    )
+    }
 }
 
 @Composable
