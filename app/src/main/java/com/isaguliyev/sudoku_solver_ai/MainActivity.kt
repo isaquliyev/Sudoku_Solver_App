@@ -117,9 +117,21 @@ fun SudokuSolverScreen(
 
     LaunchedEffect(Unit) { viewModel.initializeExtractor(context) }
 
+    var isImagePickerOpen by remember { mutableStateOf(false) }
+
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? -> uri?.let { viewModel.onImageSelected(context, it) } }
+    ) { uri: Uri? ->
+        isImagePickerOpen = false
+        uri?.let { viewModel.onImageSelected(context, it) }
+    }
+
+    val openImagePicker: () -> Unit = {
+        if (!isImagePickerOpen && !state.isLoading) {
+            isImagePickerOpen = true
+            imagePickerLauncher.launch("image/*")
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showEditDialog by remember { mutableStateOf(false) }
@@ -169,7 +181,7 @@ fun SudokuSolverScreen(
                     imageBitmap = state.imageBitmap,
                     imageSource = state.imageSource,
                     showClear   = state.hasPreviewBoard || state.imageBitmap != null,
-                    onImageClick = { imagePickerLauncher.launch("image/*") },
+                    onImageClick = openImagePicker,
                     onClear     = { viewModel.clearState() }
                 )
 
