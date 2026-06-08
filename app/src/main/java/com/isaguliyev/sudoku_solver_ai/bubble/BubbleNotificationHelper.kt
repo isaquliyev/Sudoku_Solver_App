@@ -6,8 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
 import com.isaguliyev.sudoku_solver_ai.MainActivity
+import com.isaguliyev.sudoku_solver_ai.R
 import com.isaguliyev.sudoku_solver_ai.scan.ScanPhase
 import com.isaguliyev.sudoku_solver_ai.solver.SudokuSolver
 
@@ -18,6 +21,14 @@ object BubbleNotificationHelper {
     const val NOTIFICATION_ID = 1001
     const val SUCCESS_NOTIFICATION_ID = 1002
     const val FAILURE_NOTIFICATION_ID = 1003
+
+    private val SMALL_ICON = R.drawable.ic_stat_notify
+
+    private fun launcherLargeIcon(context: Context): Bitmap? =
+        BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+
+    private fun NotificationCompat.Builder.withAppIcons(context: Context): NotificationCompat.Builder =
+        setSmallIcon(SMALL_ICON).setLargeIcon(launcherLargeIcon(context))
 
     fun createNotification(context: Context): Notification {
         createBubbleChannel(context)
@@ -41,7 +52,7 @@ object BubbleNotificationHelper {
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Sudoku Solver")
             .setContentText("Bubble active — tap it to scan a puzzle")
-            .setSmallIcon(android.R.drawable.ic_menu_crop)
+            .withAppIcons(context)
             .setContentIntent(openPendingIntent)
             .addAction(android.R.drawable.ic_delete, "Stop", stopPendingIntent)
             .setOngoing(true)
@@ -61,7 +72,7 @@ object BubbleNotificationHelper {
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Processing Sudoku")
             .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_menu_crop)
+            .withAppIcons(context)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setProgress(0, 0, true)
@@ -90,7 +101,7 @@ object BubbleNotificationHelper {
             .setContentTitle("Sudoku Solved")
             .setContentText(boardText.lines().firstOrNull() ?: "Tap to view in app")
             .setStyle(NotificationCompat.BigTextStyle().bigText(boardText))
-            .setSmallIcon(android.R.drawable.ic_menu_crop)
+            .withAppIcons(context)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
@@ -121,7 +132,7 @@ object BubbleNotificationHelper {
         val notification = NotificationCompat.Builder(context, RESULTS_CHANNEL_ID)
             .setContentTitle("Could not solve Sudoku")
             .setContentText("Tap to open the app and edit the board")
-            .setSmallIcon(android.R.drawable.ic_menu_crop)
+            .withAppIcons(context)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

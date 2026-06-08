@@ -2,12 +2,15 @@ package com.isaguliyev.sudoku_solver_ai.bubble.ui
 
 import android.content.Context
 import android.content.res.ColorStateList
-import android.graphics.Typeface
+import android.graphics.Outline
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.View
+import android.view.ViewOutlineProvider
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.ProgressBar
-import android.widget.TextView
+import com.isaguliyev.sudoku_solver_ai.R
 import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayTheme
 import com.isaguliyev.sudoku_solver_ai.bubble.BubbleOverlayUtils
 import com.isaguliyev.sudoku_solver_ai.scan.ScanPhase
@@ -18,40 +21,53 @@ class FloatingBubbleView(
     theme: BubbleOverlayTheme
 ) : FrameLayout(context) {
 
-    private val labelView: TextView
+    private val iconView: ImageView
     private val progressView: ProgressBar
+    private val idleBackground: GradientDrawable
+    private val processingBackground: GradientDrawable
 
     init {
         tag = theme.primary
-        background = GradientDrawable().apply {
+
+        idleBackground = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(theme.primary)
             setStroke(BubbleOverlayUtils.dpToPx(context, 2), theme.primaryStroke)
         }
-        elevation = BubbleOverlayUtils.dpToPx(context, 6).toFloat()
+        processingBackground = GradientDrawable().apply {
+            shape = GradientDrawable.OVAL
+            setColor(theme.primary)
+        }
+        background = idleBackground
 
-        labelView = TextView(context).apply {
-            text = "S"
-            textSize = 22f
-            setTextColor(theme.onPrimary)
-            typeface = Typeface.DEFAULT_BOLD
-            gravity = Gravity.CENTER
+        elevation = BubbleOverlayUtils.dpToPx(context, 6).toFloat()
+        clipToOutline = true
+        outlineProvider = object : ViewOutlineProvider() {
+            override fun getOutline(view: View, outline: Outline) {
+                outline.setOval(0, 0, view.width, view.height)
+            }
+        }
+
+        iconView = ImageView(context).apply {
+            setImageResource(R.mipmap.ic_launcher_round)
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            contentDescription = "Sudoku bubble"
         }
         addView(
-            labelView,
+            iconView,
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
         )
 
-        progressView = ProgressBar(context, null, android.R.attr.progressBarStyleSmall).apply {
+        progressView = ProgressBar(context, null, android.R.attr.progressBarStyle).apply {
             isIndeterminate = true
             indeterminateTintList = ColorStateList.valueOf(theme.onPrimary)
+            background = null
             visibility = GONE
         }
         addView(
             progressView,
             LayoutParams(
-                (sizePx * 0.65f).toInt(),
-                (sizePx * 0.65f).toInt(),
+                (sizePx * 0.7f).toInt(),
+                (sizePx * 0.7f).toInt(),
                 Gravity.CENTER
             )
         )
@@ -61,7 +77,8 @@ class FloatingBubbleView(
 
     fun setProcessing(processing: Boolean, phase: ScanPhase? = null) {
         if (processing) {
-            labelView.visibility = GONE
+            background = processingBackground
+            iconView.visibility = GONE
             progressView.visibility = VISIBLE
             contentDescription = when (phase) {
                 ScanPhase.EXTRACTING -> "Extracting digits"
@@ -69,7 +86,8 @@ class FloatingBubbleView(
                 null -> "Processing sudoku"
             }
         } else {
-            labelView.visibility = VISIBLE
+            background = idleBackground
+            iconView.visibility = VISIBLE
             progressView.visibility = GONE
             contentDescription = "Sudoku bubble"
         }
