@@ -166,10 +166,11 @@ fun SudokuSolverScreen(
             ) {
 
                 FlippableInputCard(
-                    bitmap       = state.imageBitmap,
-                    showClear    = state.hasPreviewBoard || state.imageBitmap != null,
+                    imageBitmap = state.imageBitmap,
+                    imageSource = state.imageSource,
+                    showClear   = state.hasPreviewBoard || state.imageBitmap != null,
                     onImageClick = { imagePickerLauncher.launch("image/*") },
-                    onClear      = { viewModel.clearState() }
+                    onClear     = { viewModel.clearState() }
                 )
 
                 GridPreviewSection(

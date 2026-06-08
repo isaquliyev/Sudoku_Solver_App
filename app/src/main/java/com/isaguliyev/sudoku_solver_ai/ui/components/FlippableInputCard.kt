@@ -26,6 +26,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.isaguliyev.sudoku_solver_ai.ui.bubble.BubbleControlContent
+import com.isaguliyev.sudoku_solver_ai.viewmodel.ImageSource
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.abs
@@ -69,12 +70,15 @@ private fun backFaceCounterRotation(rotationY: Float): Float =
 
 @Composable
 fun FlippableInputCard(
-    bitmap: Bitmap?,
+    imageBitmap: Bitmap?,
+    imageSource: ImageSource?,
     showClear: Boolean,
     onImageClick: () -> Unit,
     onClear: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val manualBitmap = if (imageSource == ImageSource.Manual) imageBitmap else null
+    val scannedBitmap = if (imageSource == ImageSource.Scan) imageBitmap else null
     var settledRotation by remember { mutableFloatStateOf(0f) }
     var dragStartRotation by remember { mutableFloatStateOf(0f) }
     var cumulativeDrag by remember { mutableFloatStateOf(0f) }
@@ -85,6 +89,20 @@ fun FlippableInputCard(
     var cardWidthPx by remember { mutableFloatStateOf(1f) }
     val density = LocalDensity.current
     val hintVisible = !isDragging && !rotation.isRunning
+
+    LaunchedEffect(imageSource, imageBitmap) {
+        if (imageSource == ImageSource.Scan && imageBitmap != null) {
+            rotation.animateTo(
+                targetValue = 180f,
+                animationSpec = tween(
+                    durationMillis = settleDurationMs(rotation.value, 180f),
+                    easing = FastOutSlowInEasing
+                )
+            )
+            rotation.snapTo(180f)
+            settledRotation = 180f
+        }
+    }
 
     LaunchedEffect(isDragging, rotation.isRunning) {
         if (isDragging || rotation.isRunning) return@LaunchedEffect
@@ -161,7 +179,7 @@ fun FlippableInputCard(
         ) {
             if (isFrontFace(rotation.value)) {
                 ImagePickerFace(
-                    bitmap       = bitmap,
+                    bitmap       = manualBitmap,
                     showClear    = showClear,
                     onClear      = onClear,
                     onImageClick = onImageClick,
@@ -174,11 +192,12 @@ fun FlippableInputCard(
                         .graphicsLayer { rotationY = backFaceCounterRotation(rotation.value) }
                 ) {
                     BubbleControlContent(
-                        modifier      = Modifier.fillMaxSize(),
-                        hintVisible   = hintVisible,
-                        isBackFace    = true,
-                        showClear     = showClear,
-                        onClear       = onClear
+                        modifier       = Modifier.fillMaxSize(),
+                        hintVisible    = hintVisible,
+                        isBackFace     = true,
+                        showClear      = showClear,
+                        onClear        = onClear,
+                        scannedBitmap  = scannedBitmap
                     )
                 }
             }
@@ -196,16 +215,11 @@ private fun ImagePickerFace(
 ) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (bitmap != null) {
-            Image(
-                bitmap             = bitmap.asImageBitmap(),
+            CardImagePreview(
+                bitmap             = bitmap,
                 contentDescription = "Selected Sudoku image",
-                modifier           = Modifier
-                    .fillMaxSize()
-                    .clip(RoundedCornerShape(20.dp))
-                    .pointerInput(onImageClick) {
-                        detectTapGestures(onTap = { onImageClick() })
-                    },
-                contentScale       = ContentScale.Fit
+                modifier           = Modifier.fillMaxSize(),
+                onClick            = onImageClick
             )
         } else {
             EmptyStateFace(
@@ -240,6 +254,34 @@ private fun ImagePickerFace(
             )
         }
     }
+}
+
+@Composable
+fun CardImagePreview(
+    bitmap: Bitmap,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "Sudoku image",
+    onClick: (() -> Unit)? = null
+) {
+    val imageModifier = Modifier
+        .fillMaxSize()
+        .clip(RoundedCornerShape(20.dp))
+        .then(
+            if (onClick != null) {
+                Modifier.pointerInput(onClick) {
+                    detectTapGestures(onTap = { onClick() })
+                }
+            } else {
+                Modifier
+            }
+        )
+
+    Image(
+        bitmap             = bitmap.asImageBitmap(),
+        contentDescription = contentDescription,
+        modifier           = modifier.then(imageModifier),
+        contentScale       = ContentScale.Fit
+    )
 }
 
 @Composable

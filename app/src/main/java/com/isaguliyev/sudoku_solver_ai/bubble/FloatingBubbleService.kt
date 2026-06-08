@@ -106,10 +106,6 @@ class FloatingBubbleService : Service() {
         applyMediaProjectionFromIntent(intent)
         overlayTheme = BubbleOverlayTheme.fromIntent(this, intent)
 
-        if (intent?.getBooleanExtra(EXTRA_TRIGGER_CAPTURE, false) == true) {
-            mainHandler.post { beginCaptureAfterProjectionReady() }
-        }
-
         if (bubbleView == null) {
             setupBubble()
         }
@@ -595,7 +591,12 @@ class FloatingBubbleService : Service() {
 
     private fun initiateScreenCapture() {
         if (mediaProjection == null) {
-            MediaProjectionConsentActivity.requestConsent(this, triggerCapture = true)
+            MediaProjectionConsentActivity.requestConsent(this, triggerCapture = false)
+            Toast.makeText(
+                this,
+                "Allow screen capture, then tap Scan again",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
         beginCaptureAfterProjectionReady()
@@ -621,7 +622,12 @@ class FloatingBubbleService : Service() {
         val mp = mediaProjection
         if (mp == null) {
             restoreBubbleVisibility()
-            MediaProjectionConsentActivity.requestConsent(this, triggerCapture = true)
+            MediaProjectionConsentActivity.requestConsent(this, triggerCapture = false)
+            Toast.makeText(
+                this,
+                "Allow screen capture, then tap Scan again",
+                Toast.LENGTH_LONG
+            ).show()
             return
         }
 

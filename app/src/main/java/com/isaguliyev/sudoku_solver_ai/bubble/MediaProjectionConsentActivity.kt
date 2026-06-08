@@ -18,7 +18,7 @@ class MediaProjectionConsentActivity : ComponentActivity() {
     companion object {
         const val EXTRA_TRIGGER_CAPTURE = "trigger_capture"
 
-        fun requestConsent(context: Context, triggerCapture: Boolean = true) {
+        fun requestConsent(context: Context, triggerCapture: Boolean = false) {
             context.startActivity(
                 Intent(context, MediaProjectionConsentActivity::class.java).apply {
                     putExtra(EXTRA_TRIGGER_CAPTURE, triggerCapture)
@@ -31,14 +31,12 @@ class MediaProjectionConsentActivity : ComponentActivity() {
     private val mpLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        val triggerCapture = intent.getBooleanExtra(EXTRA_TRIGGER_CAPTURE, true)
         if (result.resultCode == Activity.RESULT_OK && result.data != null) {
             ContextCompat.startForegroundService(
                 this,
                 Intent(this, FloatingBubbleService::class.java).apply {
                     putExtra(FloatingBubbleService.EXTRA_RESULT_CODE, result.resultCode)
                     putExtra(FloatingBubbleService.EXTRA_RESULT_DATA, result.data)
-                    putExtra(FloatingBubbleService.EXTRA_TRIGGER_CAPTURE, triggerCapture)
                 }
             )
         }

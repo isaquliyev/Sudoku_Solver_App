@@ -19,9 +19,12 @@ fun emptySudokuBoard(): List<Int?> = List(81) { null }
 
 fun boardHasClues(digits: List<Int?>): Boolean = digits.any { it != null }
 
+enum class ImageSource { Manual, Scan }
+
 data class SudokuState(
     val imageUri: Uri? = null,
     val imageBitmap: Bitmap? = null,
+    val imageSource: ImageSource? = null,
     val extractedDigits: List<Int?> = emptyList(),
     val solvedDigits: List<Int> = emptyList(),
     val originalDigits: Set<Int> = emptySet(),
@@ -60,7 +63,8 @@ class SudokuViewModel : ViewModel() {
                 errorMessage = null,
                 showExtractionWarning = false,
                 isSolved = false,
-                solvedDigits = emptyList()
+                solvedDigits = emptyList(),
+                imageSource = ImageSource.Manual
             )
 
             try {
@@ -97,7 +101,8 @@ class SudokuViewModel : ViewModel() {
                 isSolved = false,
                 solvedDigits = emptyList(),
                 imageUri = null,
-                imageBitmap = bitmap
+                imageBitmap = bitmap,
+                imageSource = ImageSource.Scan
             )
 
             processBitmap(bitmap, uri = null)
