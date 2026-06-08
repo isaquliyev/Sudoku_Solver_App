@@ -213,6 +213,38 @@ class SudokuViewModel : ViewModel() {
         }
     }
 
+    fun loadScanResult(
+        screenshotPath: String,
+        extractedDigits: List<Int?>,
+        solvedDigits: List<Int>?
+    ) {
+        viewModelScope.launch {
+            val bitmap = withContext(Dispatchers.IO) {
+                android.graphics.BitmapFactory.decodeFile(screenshotPath)
+            }
+
+            val originalIndices = extractedDigits.mapIndexedNotNull { index, value ->
+                if (value != null) index else null
+            }.toSet()
+
+            val isSolved = solvedDigits != null
+
+            _state.value = _state.value.copy(
+                imageUri = null,
+                imageBitmap = bitmap,
+                imageSource = ImageSource.Scan,
+                extractedDigits = extractedDigits,
+                originalDigits = originalIndices,
+                hasPreviewBoard = true,
+                showExtractionWarning = !isSolved,
+                isLoading = false,
+                isSolved = isSolved,
+                solvedDigits = solvedDigits ?: emptyList(),
+                errorMessage = null
+            )
+        }
+    }
+
     fun applyEditedBoard(digits: List<Int?>) {
         if (digits.size != 81) return
         if (digits == _state.value.extractedDigits) return

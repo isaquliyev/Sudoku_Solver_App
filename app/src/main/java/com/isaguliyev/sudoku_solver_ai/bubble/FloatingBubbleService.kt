@@ -28,7 +28,6 @@ import android.view.WindowManager
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
-import com.isaguliyev.sudoku_solver_ai.MainActivity
 import com.isaguliyev.sudoku_solver_ai.bubble.dismiss.BubbleDismissController
 import com.isaguliyev.sudoku_solver_ai.bubble.dismiss.DismissParticleBurst
 import com.isaguliyev.sudoku_solver_ai.bubble.dismiss.DismissTargetView
@@ -36,8 +35,15 @@ import com.isaguliyev.sudoku_solver_ai.bubble.dismiss.DismissZoneMetrics
 import com.isaguliyev.sudoku_solver_ai.bubble.touch.BubbleTouchHandler
 import com.isaguliyev.sudoku_solver_ai.bubble.ui.FloatingBubbleView
 import com.isaguliyev.sudoku_solver_ai.bubble.ui.RadialActionMenu
-import java.io.File
-import java.io.FileOutputStream
+import com.isaguliyev.sudoku_solver_ai.scan.ScanPhase
+import com.isaguliyev.sudoku_solver_ai.scan.ScanResult
+import com.isaguliyev.sudoku_solver_ai.scan.SudokuScanProcessor
+import com.isaguliyev.sudoku_solver_ai.scan.toDigitIntArray
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -63,6 +69,9 @@ class FloatingBubbleService : Service() {
     private var bubbleEnterAnimator: AnimatorSet? = null
     private var menuAnimator: AnimatorSet? = null
     private lateinit var overlayTheme: BubbleOverlayTheme
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var scanProcessor: SudokuScanProcessor? = null
+    private var isProcessing = false
 
     companion object {
         const val EXTRA_RESULT_CODE = "result_code"
@@ -114,6 +123,7 @@ class FloatingBubbleService : Service() {
     }
 
     override fun onDestroy() {
+        serviceScope.cancel()
         cancelAllAnimations()
         super.onDestroy()
         setRunning(false)
@@ -157,6 +167,10 @@ class FloatingBubbleService : Service() {
 
     private fun startForegroundWithCurrentType() {
         val notification = BubbleNotificationHelper.createNotification(this)
+        startForegroundWithNotification(notification)
+    }
+
+    private fun startForegroundWithNotification(notification: android.app.Notification) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val serviceType = if (mediaProjection != null) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
@@ -251,7 +265,9 @@ class FloatingBubbleService : Service() {
                 }
             },
             onTap = {
-                bubbleParams?.let { toggleMenu(it) }
+                if (!isProcessing) {
+                    bubbleParams?.let { toggleMenu(it) }
+                }
             }
         )
         touchHandler!!.attach(view, params)
@@ -590,6 +606,10 @@ class FloatingBubbleService : Service() {
     }
 
     private fun initiateScreenCapture() {
+        if (isProcessing) {
+            Toast.makeText(this, "Already processing a scan", Toast.LENGTH_SHORT).show()
+            return
+        }
         if (mediaProjection == null) {
             MediaProjectionConsentActivity.requestConsent(this, triggerCapture = false)
             Toast.makeText(
@@ -663,7 +683,7 @@ class FloatingBubbleService : Service() {
                 imageReader.close()
 
                 restoreBubbleVisibility()
-                saveBitmapAndLaunch(cropped)
+                processScanInBackground(cropped)
 
             } catch (e: Exception) {
                 try { image.close() } catch (_: Exception) {}
@@ -713,29 +733,56 @@ class FloatingBubbleService : Service() {
         }
     }
 
-    private fun saveBitmapAndLaunch(bitmap: Bitmap) {
-        Thread {
+    private fun processScanInBackground(bitmap: Bitmap) {
+        isProcessing = true
+        updateProcessingUi(ScanPhase.EXTRACTING)
+
+        val processor = scanProcessor ?: SudokuScanProcessor(this).also { scanProcessor = it }
+
+        serviceScope.launch {
             try {
-                val file = File(cacheDir, "sudoku_scan.png")
-                FileOutputStream(file).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.PNG, 95, out)
+                val result = processor.process(bitmap) { phase ->
+                    mainHandler.post { updateProcessingUi(phase) }
                 }
                 bitmap.recycle()
 
-                mainHandler.post {
-                    startActivity(
-                        Intent(this, MainActivity::class.java).apply {
-                            action = MainActivity.ACTION_SCREENSHOT
-                            putExtra(MainActivity.EXTRA_SCREENSHOT_PATH, file.absolutePath)
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                        }
-                    )
+                when (result) {
+                    is ScanResult.Success -> {
+                        BubbleNotificationHelper.showSuccessNotification(
+                            context = this@FloatingBubbleService,
+                            solvedDigits = result.solvedDigits,
+                            extractedDigits = result.extractedDigits.toDigitIntArray(),
+                            screenshotPath = result.screenshotPath
+                        )
+                    }
+                    is ScanResult.Failure -> {
+                        BubbleNotificationHelper.showFailureNotification(
+                            context = this@FloatingBubbleService,
+                            extractedDigits = result.extractedDigits.toDigitIntArray(),
+                            screenshotPath = result.screenshotPath
+                        )
+                    }
                 }
             } catch (e: Exception) {
+                bitmap.recycle()
+                Toast.makeText(
+                    this@FloatingBubbleService,
+                    "Scan failed: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } finally {
+                isProcessing = false
                 mainHandler.post {
-                    Toast.makeText(this, "Failed to save scan: ${e.message}", Toast.LENGTH_SHORT).show()
+                    bubbleView?.setProcessing(false)
+                    startForegroundWithCurrentType()
                 }
             }
-        }.start()
+        }
+    }
+
+    private fun updateProcessingUi(phase: ScanPhase) {
+        bubbleView?.setProcessing(true, phase)
+        val notification = BubbleNotificationHelper.createProgressNotification(this, phase)
+        startForegroundWithNotification(notification)
     }
 }

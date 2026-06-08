@@ -3,7 +3,6 @@ package com.isaguliyev.sudoku_solver_ai
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -52,22 +51,16 @@ import com.isaguliyev.sudoku_solver_ai.ui.theme.Sudoku_solver_aiTheme
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuState
 import com.isaguliyev.sudoku_solver_ai.viewmodel.SudokuViewModel
 import com.isaguliyev.sudoku_solver_ai.viewmodel.boardHasClues
-import org.opencv.android.OpenCVLoader
+import com.isaguliyev.sudoku_solver_ai.scan.toDigitList
 
 class MainActivity : ComponentActivity() {
 
     companion object {
-        private const val TAG = "MainActivity"
-        const val ACTION_SCREENSHOT = "com.isaguliyev.sudoku_solver_ai.ACTION_SCREENSHOT"
+        const val ACTION_OPEN_SCAN_RESULT = "com.isaguliyev.sudoku_solver_ai.ACTION_OPEN_SCAN_RESULT"
         const val EXTRA_SCREENSHOT_PATH = "screenshot_path"
-
-        init {
-            if (OpenCVLoader.initLocal()) {
-                Log.i(TAG, "OpenCV loaded successfully")
-            } else {
-                Log.e(TAG, "OpenCV initialization failed")
-            }
-        }
+        const val EXTRA_EXTRACTED_DIGITS = "extracted_digits"
+        const val EXTRA_SOLVED_DIGITS = "solved_digits"
+        const val EXTRA_FROM_BACKGROUND_SCAN = "from_background_scan"
     }
 
     private val sudokuViewModel: SudokuViewModel by lazy {
@@ -78,7 +71,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         sudokuViewModel.initializeExtractor(this)
-        handleScreenshotIntent(intent)
+        handleScanResultIntent(intent)
         setContent {
             Sudoku_solver_aiTheme {
                 Surface(
@@ -94,17 +87,21 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleScreenshotIntent(intent)
+        handleScanResultIntent(intent)
     }
 
-    private fun handleScreenshotIntent(intent: Intent?) {
-        if (intent?.action == ACTION_SCREENSHOT) {
-            val path = intent.getStringExtra(EXTRA_SCREENSHOT_PATH) ?: return
-            val bitmap = android.graphics.BitmapFactory.decodeFile(path)
-            if (bitmap != null) {
-                sudokuViewModel.onBitmapSelected(this, bitmap)
-            }
-        }
+    private fun handleScanResultIntent(intent: Intent?) {
+        if (intent?.action != ACTION_OPEN_SCAN_RESULT) return
+
+        val path = intent.getStringExtra(EXTRA_SCREENSHOT_PATH) ?: return
+        val extractedArray = intent.getIntArrayExtra(EXTRA_EXTRACTED_DIGITS) ?: return
+        val solvedArray = intent.getIntArrayExtra(EXTRA_SOLVED_DIGITS)
+
+        sudokuViewModel.loadScanResult(
+            screenshotPath = path,
+            extractedDigits = extractedArray.toDigitList(),
+            solvedDigits = solvedArray?.toList()
+        )
     }
 }
 

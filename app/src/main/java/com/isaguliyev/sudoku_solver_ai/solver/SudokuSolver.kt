@@ -95,4 +95,14 @@ object SudokuSolver {
     fun copyBoard(board: Array<IntArray>): Array<IntArray> {
         return Array(9) { row -> board[row].copyOf() }
     }
+
+    /**
+     * Formats a solved 9x9 board as 9 lines of "xxx \t xxx \t xxx".
+     */
+    fun formatBoardLines(digits: List<Int>): String =
+        (0 until 9).joinToString("\n") { row ->
+            digits.subList(row * 9, row * 9 + 9)
+                .chunked(3)
+                .joinToString("\t") { chunk -> chunk.joinToString("") }
+        }
 }
