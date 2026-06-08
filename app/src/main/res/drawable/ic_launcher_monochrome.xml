@@ -1,0 +1,24 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Sudoku grid (3x3) -->
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M28,52 L80,52 M28,64 L80,64 M28,76 L80,76 M40,46 L40,82 M54,46 L54,82 M68,46 L68,82"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5" />
+    <!-- Character head -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,26 m-22,0 a22,22 0 1,1 44,0 a22,22 0 1,1 -44,0" />
+    <!-- Character body -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M46,50 L62,50 Q66,58 62,66 L46,66 Q42,58 46,50 Z" />
+    <!-- Pencil -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M56,46 L74,64 L70,68 L52,50 Z" />
+</vector>

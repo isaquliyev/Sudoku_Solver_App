@@ -6,8 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.core.app.NotificationCompat
 import com.isaguliyev.sudoku_solver_ai.MainActivity
 import com.isaguliyev.sudoku_solver_ai.R
@@ -22,13 +20,11 @@ object BubbleNotificationHelper {
     const val SUCCESS_NOTIFICATION_ID = 1002
     const val FAILURE_NOTIFICATION_ID = 1003
 
-    private val SMALL_ICON = R.drawable.ic_stat_notify
-
-    private fun launcherLargeIcon(context: Context): Bitmap? =
-        BitmapFactory.decodeResource(context.resources, R.mipmap.ic_launcher)
+    private val SMALL_ICON = R.drawable.ic_launcher_monochrome
 
     private fun NotificationCompat.Builder.withAppIcons(context: Context): NotificationCompat.Builder =
-        setSmallIcon(SMALL_ICON).setLargeIcon(launcherLargeIcon(context))
+        setSmallIcon(SMALL_ICON)
+            .setLargeIcon(NotificationIconHelper.launcherNotificationBitmap(context))
 
     fun createNotification(context: Context): Notification {
         createBubbleChannel(context)
