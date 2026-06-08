@@ -115,90 +115,102 @@ fun FlippableInputCard(
         }
     }
 
-    Card(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .aspectRatio(4f / 3f)
-            .onSizeChanged { cardWidthPx = it.width.toFloat() }
-            .pointerInput(cardWidthPx, settledRotation) {
-                detectHorizontalDragGestures(
-                    onDragStart = {
-                        isDragging = true
-                        scope.launch {
-                            rotation.stop()
-                            peekRotation.stop()
-                            peekRotation.snapTo(0f)
-                        }
-                        dragStartRotation = settledRotation
-                        cumulativeDrag = 0f
-                    },
-                    onDragEnd = {
-                        val progress = abs(cumulativeDrag) / cardWidthPx
-                        val target = if (progress > FLIP_DRAG_THRESHOLD && cumulativeDrag != 0f) {
-                            flipTargetRotation(dragStartRotation, cumulativeDrag)
-                        } else {
-                            dragStartRotation
-                        }
-                        scope.launch {
-                            rotation.stop()
-                            val current = rotation.value
-                            rotation.animateTo(
-                                targetValue = target,
-                                animationSpec = tween(
-                                    durationMillis = settleDurationMs(current, target),
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                            val normalized = normalizeSettledRotation(target)
-                            rotation.snapTo(normalized)
-                            settledRotation = normalized
-                            isDragging = false
-                        }
-                    },
-                    onHorizontalDrag = { _, dragAmount ->
-                        cumulativeDrag += dragAmount
-                        val signedProgress = (cumulativeDrag / cardWidthPx).coerceIn(-1f, 1f)
-                        val rawRotation = dragStartRotation + signedProgress * 180f
-                        scope.launch {
-                            rotation.snapTo(clampDragRotation(rawRotation, dragStartRotation))
-                        }
-                    }
-                )
-            }
-            .graphicsLayer {
-                rotationY = rotation.value + peekRotation.value
-                cameraDistance = 12f * density.density
-            },
-        shape     = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            .padding(vertical = 20.dp)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            if (isFrontFace(rotation.value)) {
-                ImagePickerFace(
-                    bitmap       = manualBitmap,
-                    showClear    = showClear,
-                    onClear      = onClear,
-                    onImageClick = onImageClick,
-                    hintVisible  = hintVisible
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { rotationY = backFaceCounterRotation(rotation.value) }
-                ) {
-                    BubbleControlContent(
-                        modifier       = Modifier.fillMaxSize(),
-                        hintVisible    = hintVisible,
-                        isBackFace     = true,
-                        showClear      = showClear,
-                        onClear        = onClear,
-                        scannedBitmap  = scannedBitmap
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(4f / 3f)
+                .align(Alignment.Center)
+                .onSizeChanged { cardWidthPx = it.width.toFloat() }
+                .pointerInput(cardWidthPx, settledRotation) {
+                    detectHorizontalDragGestures(
+                        onDragStart = {
+                            isDragging = true
+                            scope.launch {
+                                rotation.stop()
+                                peekRotation.stop()
+                                peekRotation.snapTo(0f)
+                            }
+                            dragStartRotation = settledRotation
+                            cumulativeDrag = 0f
+                        },
+                        onDragEnd = {
+                            val progress = abs(cumulativeDrag) / cardWidthPx
+                            val target = if (progress > FLIP_DRAG_THRESHOLD && cumulativeDrag != 0f) {
+                                flipTargetRotation(dragStartRotation, cumulativeDrag)
+                            } else {
+                                dragStartRotation
+                            }
+                            scope.launch {
+                                rotation.stop()
+                                val current = rotation.value
+                                rotation.animateTo(
+                                    targetValue = target,
+                                    animationSpec = tween(
+                                        durationMillis = settleDurationMs(current, target),
+                                        easing = FastOutSlowInEasing
+                                    )
+                                )
+                                val normalized = normalizeSettledRotation(target)
+                                rotation.snapTo(normalized)
+                                settledRotation = normalized
+                                isDragging = false
+                            }
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            cumulativeDrag += dragAmount
+                            val signedProgress = (cumulativeDrag / cardWidthPx).coerceIn(-1f, 1f)
+                            val rawRotation = dragStartRotation + signedProgress * 180f
+                            scope.launch {
+                                rotation.snapTo(clampDragRotation(rawRotation, dragStartRotation))
+                            }
+                        }
                     )
+                }
+                .graphicsLayer {
+                    rotationY = rotation.value + peekRotation.value
+                    cameraDistance = 16f * density.density
+                    clip = false
+                }
+        ) {
+            Card(
+                modifier = Modifier.fillMaxSize(),
+                shape     = RoundedCornerShape(20.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                colors    = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isFrontFace(rotation.value)) {
+                        ImagePickerFace(
+                            bitmap       = manualBitmap,
+                            showClear    = showClear,
+                            onClear      = onClear,
+                            onImageClick = onImageClick,
+                            hintVisible  = hintVisible
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { rotationY = backFaceCounterRotation(rotation.value) }
+                        ) {
+                            BubbleControlContent(
+                                modifier       = Modifier.fillMaxSize(),
+                                hintVisible    = hintVisible,
+                                isBackFace     = true,
+                                showClear      = showClear,
+                                onClear        = onClear,
+                                scannedBitmap  = scannedBitmap
+                            )
+                        }
+                    }
                 }
             }
         }
